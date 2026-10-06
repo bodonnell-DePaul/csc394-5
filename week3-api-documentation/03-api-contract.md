@@ -20,10 +20,14 @@
 
 example using synthetic data:
 ~~~
+GET /api/medication?patient=11111111-1111-2111-6111-111111111111&limit=20&offset=0
+Authorization: Bearer <access-token>
+~~~
+~~~
 {
   "medications": [
     {
-      "id": "11111111-1111-4111-8111-111111111111",
+      "id": "6111-4111-2111",
       "name": "Benadryl",
       "manufacturer": "Kenvue"
     }
