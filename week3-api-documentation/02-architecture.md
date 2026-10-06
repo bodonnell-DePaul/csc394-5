@@ -17,8 +17,9 @@ Component | Owns | Does Not Own|
 - patients: id, name, gender, birthdate
 - symptom log: id, owner_id, timestamp, current_medication_ids , symptoms
 - medications: id, name, manufacturer
+- ticket: id, patient_id, symptom_ids, severity, status
 
-Each patient owns multiple patient logs. Each symptom log references one or more medications.
+Each patient owns multiple patient logs. Each symptom log references one or more medications. Each ticket owns one patient and references symptoms.
 
 ## Authentication, Authorization, Secrets, & Persistent Data
 
