@@ -22,9 +22,14 @@ For this course project, the EHR data is seeded by the team. Healthwatch will no
 | 10 | | |
 
 ## User Story Backlog
-|ID & Priority| User story & Acceptance Criteria | Target & Dependencies|
-|---|---|---|
-| | |
+|ID & Priority| User story & Acceptance Criteria |Owner| Target & Dependencies|
+|---|---|---|---|
+| US-01/Must | As a patient, I can view my medical information so I can keep track my treatment progress | | |
+| US-02/Must | As a doctor, I can view my patient's medical information so I have all info to make a decision | | |
+| US-03/Must | As a patient, I can report symptoms easily so I can keep update my doctor to my current condition| | |
+| US-04/Must| As a doctor, I can view patients through a queue based on severity so I can focus on high-risk patients before lower priorities| | |
+| US-05/Should | As a user, I can message my counterpart based on my conditon so that we can discuss the next steps urgently | | |
+| US-06/Could | As a patient, I can be alerted by a notification, so I can remember to take my medication| | | 
 
 ## Engineering Tasks 
 |ID| Task & Output | Target & Dependencies|
@@ -34,6 +39,7 @@ For this course project, the EHR data is seeded by the team. Healthwatch will no
 ## Definition of Done
 
 ## Testing, CI/CD, and release plan
+
 
 ## Risks
 
