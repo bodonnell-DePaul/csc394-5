@@ -27,4 +27,4 @@ Authentication relies on lightweight JSON Web Tokens (JWT) generated after valid
 ## Decisions & Tradeoffs
 SQLite was chosen  to ensure zero-configuration deployment and quick local setup, accepting the tradeoff that write concurrency is limited under heavy loads. The team opted to pre-load a normalized subset of the OpenFDA adverse drug event dataset locally rather than consuming live external APIs, trading real-time data updates for deterministic offline performance and freedom from API rate limits. Furthermore, the application deliberately restricts symptom input to structured forms instead of open-text responses, sacrificing user input flexibility to eliminate the need for complex natural language processing and guarantee predictable risk-scoring accuracy. Finally, healthcare integration standards such as FHIR and regulatory compliance protocols like HIPAA were explicitly excluded from the stack to focus entirely on demonstrating core user-experience improvements.
 
-## Technical Risks and Spikes
+## Technical Risks and Unknowns
