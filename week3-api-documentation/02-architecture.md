@@ -16,6 +16,7 @@ Component | Owns | Does Not Own|
 ## Data Entities & Relationships
 - patients: id, name, gender, birthdate
 - symptom log: id, owner_id, timestamp, current_medication, symptoms, severity
+
 patients own symptom logs
 
 ## Authentication, Authorization, Secrets, & Persistent Data
