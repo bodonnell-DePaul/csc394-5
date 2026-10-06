@@ -5,7 +5,7 @@
 - Malformed JSON, malformed path UUIDS and unknown parameters receive 400 BAD_REQUEST. Invalid JSON fields or values will receive 422 VALIDATION_ERROR.
 - The server reports all safely detectable field errors together rather than discovering them one request at a time.
 - Single resource bodies are packaged with the resource itself. Collection bodies use page;
-- 
+
 ## Endpoint API
 
 |Endpoint Method & Path| Purpose & Inputs| Success & Error Response|
