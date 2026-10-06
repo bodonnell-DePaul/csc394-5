@@ -12,14 +12,15 @@ For this course project, the EHR data is seeded by the team. Healthwatch will no
 ## Milestones
 |Week| Goal | Exit Evidence|
 |---|---|---|
-| 3 | | |
-| 4 | | |
-| 5 | | |
-| 6 | | |
+| 3 | Architecture, API, and Delivery plan |  |
+| 4 | Architecture, integration | Spike records; thin deployed skeleton; concept demo script|
+| 5 | Concept Demo + CI/testing | Patients report symptoms and see record of symptom; tests and reviewed build recorded|
+| 6 |  | |
 | 7 | | |
 | 8 | | | 
-| 9 | | |
+| 9 | Preview Demo | |
 | 10 | | |
+| 11 | Final demo and presentation| functional release|
 
 ## User Story Backlog
 |ID & Priority| User story & Acceptance Criteria |Owner| Target & Dependencies|
