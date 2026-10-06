@@ -10,12 +10,12 @@
 
 |Endpoint Method & Path| Purpose & Inputs| Success & Error Response|
 |---|---|---|
-| POST /api/tickets/{ticketid} | change ticket status to resolved;| 200: request confirmation |
+| PATCH /api/tickets/{ticketid} | change ticket status to resolved;| 200: request confirmation |
 | GET /api/tickets | tickets; optional resolved = true or false, optional patientID, limit, offset | 200: ticket collection |
 | GET /api/tickets/{ticketid} | specific ticket | 200: ticket | 200:ticket|
 | POST /api/symptom_report | update health history; patientID, symptoms| 200: request confirmation |
 | GET /api/symptom_report | patient's symptom reports; patientID, limit, offset| 200: symptom_report collection|
-| POST /api/medication | update health prescription; patientID, medicationID| 200: request confirmation |
+| PATCH /api/medication | update health prescription; patientID, medicationID| 200: request confirmation |
 | GET /api/medication | health prescription; patientID, limit, offset| 200: medication collection|
 
 example using synthetic data:
@@ -39,4 +39,10 @@ for validation, permissions, conflicts, retries, filtering, or pagination when a
 ## Acceptance tests
 |ID|Action|Success|
 |---|---|---|
-| | | |
+| AT-01 | Sent Symptom Report | adds one persistent symptom report |
+| AT-02 | List own medication; get/patch another patient's medication  | No foreign medication in list; 403 for both requests|
+| AT-03 | List patients symptoms | 403 |
+| AT-04 | Submit malformed JSON, or non-JSON body | 400 for malformed json; 415 for unsupported media type|
+| AT-05 | Rate limit, unexpected server error } safe 429/500 envelope; Retry-After on 429; no fake success|
+| AT-06 | View a known tickets details, request a nonexistent ticket; supply a malformed path UUID | 200 with appropriate fields; 404 for missing ID; 400 for malformed pathID |
+
