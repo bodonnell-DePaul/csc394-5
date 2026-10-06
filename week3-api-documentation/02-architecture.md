@@ -15,9 +15,10 @@ Component | Owns | Does Not Own|
 
 ## Data Entities & Relationships
 - patients: id, name, gender, birthdate
-- symptom log: id, owner_id, timestamp, current_medication, symptoms, severity
+- symptom log: id, owner_id, timestamp, current_medication_ids , symptoms
+- medications: id, name, manufacturer
 
-patients own symptom logs
+Each patient owns multiple patient logs. Each symptom log references one or more medications.
 
 ## Authentication, Authorization, Secrets, & Persistent Data
 
