@@ -1,17 +1,31 @@
 # 2. Architecture
 
 ## Component boundaries
-[A diagram showing the client, API, database, external services, and how they communicate]
-   
- 
+
+```mermaid
+flowchart LR
+    subgraph Client["Client Layer"]
+        UI["React Client<br/>Displays messages, medical information,<br/>severity queues, and symptom report form"]
+    end
+
+    subgraph Data["Local Data Layer"]
+        ETL["Data Loading / Normalization<br/>Imports OpenFDA dataset into SQLite"]
+        SQLite["SQLite Database<br/>patients, symptom_reports, medications, tickets"]
+        Dataset["OpenFDA Drug Event Dataset<br/>Historical adverse event and drug data"]
+    end
+
+    Dataset --> ETL
+    ETL --> SQLite
+    UI <-->|"Read and write patient, medication, and ticket records"| SQLite
+```
 
 Component Descriptions
 
 Component | Owns | Does Not Own|
 |---|---|---|
 |React Client| displays messages, medical information, and severity queues; symptom report form access| database access|
-|Backend Python FastAPI| management of data validation to ensure correctly identified symptoms match correct severity, management of data ingestion | decision-making on behalf of doctors|
-|SqLite + OpenFDA Drug Event Data Set| provides past information of patients, drug use, their physicians, and logged side effects. Also links this data into a simple, zero-config relational database file| data visualization|
+|SQLite + OpenFDA Drug Event Data Set| provides past information of patients, drug use, their physicians, and logged side effects; stores normalized patient, medication, symptom, and ticket records| direct decision-making on behalf of doctors|
+|Data Loading / Normalization| imports and normalizes the OpenFDA dataset into SQLite so the app can query it locally without a backend API| user interface behavior|
 
 ## Data Entities & Relationships
 - patients: id, name, gender, birthdate, current medication_ids
@@ -22,10 +36,10 @@ Component | Owns | Does Not Own|
 Each patient owns multiple patient logs. Each symptom log references one or more medications. Each ticket owns one patient and references symptoms.
 
 ## Authentication, Authorization, Secrets, & Persistent Data
-Authentication relies on lightweight JSON Web Tokens (JWT) generated after validating pre-seeded synthetic credentials for patients and doctors. Authorization is strictly enforced using role-based access control inside FastAPI route dependencies, allowing patients to only submit logs and view their own prescriptions, while restricting ticket queue access and patient log overviews to doctors. Application secrets, such as JWT signing keys and database connection paths, are managed through environment variables using Pydantic settings. Persistent data is stored directly in a local zero-configuration SQLite database file named healthwatch.db, which is populated with synthetic user records and OpenFDA reference maps upon application startup.
+Authentication relies on lightweight JSON Web Tokens (JWT) generated after validating pre-seeded synthetic credentials for patients and doctors. Authorization is strictly enforced using role-based access controls before data is returned to the client. Sensitive credentials are kept in local configuration/secrets files rather than embedded in the frontend. Persistent data is stored in SQLite and seeded from the OpenFDA dataset; the patient, symptom, medication, and ticket tables provide local state across app sessions.
 
 ## Decisions & Tradeoffs
-SQLite was chosen  to ensure zero-configuration deployment and quick local setup, accepting the tradeoff that write concurrency is limited under heavy loads. The team opted to pre-load a normalized subset of the OpenFDA adverse drug event dataset locally rather than consuming live external APIs, trading real-time data updates for deterministic offline performance and freedom from API rate limits. Furthermore, the application deliberately restricts symptom input to structured forms instead of open-text responses, sacrificing user input flexibility to eliminate the need for complex natural language processing and guarantee predictable risk-scoring accuracy. Finally, healthcare integration standards such as FHIR and regulatory compliance protocols like HIPAA were explicitly excluded from the stack to focus entirely on demonstrating core user-experience improvements.
+SQLite was chosen to ensure zero-configuration deployment and quick local setup, accepting the tradeoff that write concurrency is limited under heavy loads. The team opted to pre-load a normalized subset of the OpenFDA dataset into SQLite so the application can access historical patient and adverse event information without requiring a separate API server.
 
 ## Technical Risks and Unknowns
-The primary technical risk involves unstandardized or inconsistent symptom terms within the OpenFDA adverse drug event dataset, which will be mitigated by a technical spike dedicated to cleaning and mapping a top-20 medication list against 50 predefined symptom keywords. A secondary risk is the potential for the synthetic risk model to incorrectly rate severity scores, which will be addressed by implementing a deterministic risk matrix mapping specific drug and symptom pairs directly to fixed severity thresholds. Finally, to prevent multi-user state synchronization issues where newly submitted patient tickets fail to display on doctor dashboards, the team will implement client-side polling on the doctor queue page to automatically pull fresh ticket updates every few seconds.
+The primary technical risk involves unstandardized or inconsistent symptom terms within the OpenFDA adverse drug event dataset, which will be mitigated by a technical spike dedicated to cleaning and normalizing symptom names before they are stored in SQLite.
