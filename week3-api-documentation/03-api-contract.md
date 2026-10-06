@@ -18,11 +18,25 @@
 | POST /api/medication | update health prescription; patientID, medicationID| 200: request confirmation |
 | GET /api/medication | health prescription; patientID, limit, offset| 200: medication collection|
 
-example using synthetic data: _
-
+example using synthetic data:
+~~~
+{
+  "medications": [
+  {
+    "id": "11111111-1111-4111-8111-111111111111",
+    "name": "Benadryl",
+    "manufacturer": "Kenvue"
+  }
+  ],
+  "page":{"limit":20,"offset":0,"total":1}
+}
+    
+~~~
 ## Rules
 for validation, permissions, conflicts, retries, filtering, or pagination when applicable
 
 
-## Planned API & acceptance tests
-
+## Acceptance tests
+|ID|Action|Success|
+|---|---|---|
+| | | |
