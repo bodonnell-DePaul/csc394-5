@@ -39,6 +39,7 @@ With our platform, patients can track down side effects or reactions associated 
 For the scope of this demo, we can assume:
 - the data encryption is alreadt HIPPA compliant
 - Healthwatch is already properly integrated with healthcare data
+
 We acknowledge:
 - the necessity of the corpus of data to assess risk 
 
