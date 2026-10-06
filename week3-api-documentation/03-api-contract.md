@@ -36,9 +36,6 @@ Authorization: Bearer <access-token>
 }
     
 ~~~
-## Rules
-for validation, permissions, conflicts, retries, filtering, or pagination when applicable
-
 
 ## Acceptance tests
 |ID|Action|Success|
