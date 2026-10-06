@@ -15,7 +15,7 @@ For this course project, the EHR data is seeded by the team. Healthwatch will no
 | 3 | Architecture, API, and Delivery plan |  |
 | 4 | Architecture, integration | Spike records; thin deployed skeleton; concept demo script|
 | 5 | Concept Demo + CI/testing | Patients report symptoms and see record of symptom; tests and reviewed build recorded|
-| 6 |  | |
+| 6 | Midterm check-in demo | check client-API integration and deployment of doctors making modifications|
 | 7 | | |
 | 8 | | | 
 | 9 | Preview Demo | |
