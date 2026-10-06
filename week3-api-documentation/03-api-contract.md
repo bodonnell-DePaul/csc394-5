@@ -43,6 +43,6 @@ for validation, permissions, conflicts, retries, filtering, or pagination when a
 | AT-02 | List own medication; get/patch another patient's medication  | No foreign medication in list; 403 for both requests|
 | AT-03 | List patients symptoms | 403 |
 | AT-04 | Submit malformed JSON, or non-JSON body | 400 for malformed json; 415 for unsupported media type|
-| AT-05 | Rate limit, unexpected server error } safe 429/500 envelope; Retry-After on 429; no fake success|
+| AT-05 | Rate limit, unexpected server error | safe 429/500 envelope; Retry-After on 429; no fake success|
 | AT-06 | View a known tickets details, request a nonexistent ticket; supply a malformed path UUID | 200 with appropriate fields; 404 for missing ID; 400 for malformed pathID |
 
