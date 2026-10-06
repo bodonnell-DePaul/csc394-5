@@ -16,7 +16,7 @@
 | POST /api/symptom_report | update health history; patientID, symptoms| 200: request confirmation |
 | GET /api/symptom_report | patient's symptom reports; patientID, limit, offset| 200: symptom_report collection|
 | POST /api/medication | update health prescription; patientID, medicationID| 200: request confirmation |
-| GET /api/medication | health prescription; patientID| 200: request confirmation |
+| GET /api/medication | health prescription; patientID, limit, offset| 200: medication collection|
 
 example using synthetic data: _
 
