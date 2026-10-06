@@ -10,9 +10,9 @@
 
 |Endpoint Method & Path| Purpose & Inputs| Success & Error Response|
 |---|---|---|
-| GET /api/tickets | tickets; optional resolved = true or false, optional patientID, limit, offset | 200: ticket collection |
 | POST /api/tickets/{ticketid} | change ticket status to resolved;| 200: request confirmation |
-| GET /api/tickets/{loanID} | specific ticket | 200: ticket | 200:ticket|
+| GET /api/tickets | tickets; optional resolved = true or false, optional patientID, limit, offset | 200: ticket collection |
+| GET /api/tickets/{ticketid} | specific ticket | 200: ticket | 200:ticket|
 | POST /api/symptom_report | update health history; patientID, symptoms| 200: request confirmation |
 | GET /api/symptom_report | patient's symptom reports; patientID, limit, offset| 200: symptom_report collection|
 | POST /api/medication | update health prescription; patientID, medicationID| 200: request confirmation |
