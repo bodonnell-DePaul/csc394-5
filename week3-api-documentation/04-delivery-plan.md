@@ -15,11 +15,11 @@ For this course project, the EHR data is seeded by the team. Healthwatch will no
 | 3 | Architecture, API, and Delivery plan |  |
 | 4 | Architecture, integration | Spike records; thin deployed skeleton; concept demo script|
 | 5 | Concept Demo + CI/testing | Patients report symptoms and see record of symptom; tests and reviewed build recorded|
-| 6 | Midterm check-in demo | check client-API integration and deployment of doctors making modifications|
-| 7 | | |
-| 8 | | | 
-| 9 | Preview Demo | |
-| 10 | | |
+| 6 | Midterm check-in demo | check client-API integration and deployment of doctor interface functions and shared environment; rehearse check-in|
+| 7 | Deployment automation/peer feedback |configure push notifications/alerts for patient pill intake/reported side effects/created appointments; setting up automatic deployment  |
+| 8 |Security and performance |fixing bugs associated with api and testing code to ensure project functionality | 
+| 9 | Preview Demo |Address any remaining technical debt or bugs and update documentation; essentially checking for demo readiness to present project deliverable |
+| 10 | Presentation and hand-off preparation| contribution/reflection drafts; walkthrough of software project |
 | 11 | Final demo and presentation| functional release|
 
 ## User Story Backlog
