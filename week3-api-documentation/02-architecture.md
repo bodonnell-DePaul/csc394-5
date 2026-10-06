@@ -2,22 +2,23 @@
 
 ## Component boundaries
 
-```mermaid
 flowchart LR
     subgraph Client["Client Layer"]
         UI["React Client<br/>Displays messages, medical information,<br/>severity queues, and symptom report form"]
     end
 
-    subgraph Data["Local Data Layer"]
-        ETL["Data Loading / Normalization<br/>Imports OpenFDA dataset into SQLite"]
-        SQLite["SQLite Database<br/>patients, symptom_reports, medications, tickets"]
-        Dataset["OpenFDA Drug Event Dataset<br/>Historical adverse event and drug data"]
+    subgraph Backend["Python Processing Layer"]
+        PY["Python Backend / ETL Script<br/>Loads OpenFDA dataset<br/>Normalizes and validates records<br/>Writes to SQLite"]
     end
 
-    Dataset --> ETL
-    ETL --> SQLite
+    subgraph Data["Local Data Layer"]
+        Dataset["OpenFDA Drug Event Dataset"]
+        SQLite["SQLite Database<br/>patients, symptom_reports, medications, tickets"]
+    end
+
+    Dataset --> PY
+    PY --> SQLite
     UI <-->|"Read and write patient, medication, and ticket records"| SQLite
-```
 
 Component Descriptions
 
