@@ -44,8 +44,3 @@ The symptom logging workflow can be completed with a synthetic doctor and synthe
 - HIPPA compliance is unnecessary for the purposes of the demo.
 - Integration with Healthcare applications is outside the scope of this project.
 
-## AI Disclosure
-AI was implemented as a brainstorming that prescribed suggestions on which proposed features and parts of our planned stack were necessary for our program.
-Rendered useful as a feedback tool to ensure that our program would differentiate itself from standard patient portals.
-
-
