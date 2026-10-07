@@ -31,7 +31,7 @@ For this course project, the EHR data is seeded by the team. Healthwatch will no
 | US-04/Must| As a doctor, I can view patients through a queue based on severity so I can focus on high-risk patients before lower priorities| | |
 | US-05/Should | As a user, I can message my counterpart in severe cases so that we can discuss the next steps urgently | | |
 | US-06/Could | As a patient, I can be alerted by a notification, so I can remember to take my medication| | | 
-
+| US-07/Could | as a patient, I can select my symptoms through text box or dropdown so I can easily communicate my diagnosis| | | 
 ## Engineering Tasks 
 |ID| Task & Output | Owner | Target & Dependencies|
 |---|---|---|---|
