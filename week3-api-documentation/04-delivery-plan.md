@@ -42,7 +42,7 @@ For this course project, the EHR data is seeded by the team. Healthwatch will no
 - Acceptance criteria pass
 - Lint, type checks, and unit/API test pass
 - Documentation updated to match behaviour
-- the change is integrated in shared environment when the environment exists.
+- The change is integrated in shared environment when the environment exists.
 ## Testing, CI/CD, and release plan
 Week 5: install lint; type check; unit tests; example validation. Use synthetic accounts for isolated test;
 
