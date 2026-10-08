@@ -35,7 +35,7 @@ For this course project, the EHR data is seeded by the team. Healthwatch will no
 ## Engineering Tasks 
 |ID| Task & Output | Owner | Target & Dependencies|
 |---|---|---|---|
-|EN-00 | Initial repository setup, FastAPI/Client linting, and a local health-endpoint cURL check| W4, no dependencies.
+|EN-00 | Initial repository setup, FastAPI/Client linting, and a local health-endpoint cURL check| | W4, no dependencies.|
 
 ## Definition of Done
 - Acceptance criteria pass
