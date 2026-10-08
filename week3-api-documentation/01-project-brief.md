@@ -41,6 +41,9 @@ The symptom logging workflow can be completed with a synthetic doctor and synthe
 - Appointment requests that get sent to doctors via email
 
 ## Assumptions & Constraints
+- The platform does not intend to replace any decision making made by the doctor.
+- The analysis will assume that simplified symptom data will be sufficient to determine risk.  
 - HIPPA compliance is unnecessary for the purposes of the demo.
 - Integration with Healthcare applications is outside the scope of this project.
+
 
