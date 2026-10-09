@@ -31,12 +31,16 @@ Component | Owns | Does Not Own|
 |SQLite + OpenFDA Drug Event Data Set| provides past information of patients, drug use, their physicians, and logged side effects; stores normalized patient, medication, symptom, and ticket records| direct application logic|
 
 ## Data Entities & Relationships
-- patients: id, name, gender, birthdate, current medication_ids
-- symptom report: id, owner_id, timestamp, current_medication_ids , symptoms
+- patients: id, name, gender, birthdate
+- symptom_report: id, owner_id, timestamp,
+- symptom_report_symptoms: id, symptom_id, severity
+- symptom_report_medications: id, medication_id
 - medications: id, name, manufacturer
-- ticket: id, patient_id, symptom_report_ids, severity, status
+- patient_medications: id, patient_id, medication_id, date, status
+- ticket: id, time_stamp, patient_id, symptom_report_ids, severity, status
+- symptoms: id, term
 
-Each patient owns multiple patient logs. Each symptom log references one or more medications. Each ticket owns one patient and references symptoms.
+Each patient owns multiple symptom logs, and medications. Each symptom log references one or more medications and symptoms. Each ticket owns one symptom reports.
 
 ## Authentication, Authorization, Secrets, & Persistent Data
 Authentication relies on lightweight JSON Web Tokens (JWT) generated after validating pre-seeded synthetic credentials for patients and doctors. Authorization is strictly enforced using role-based access controls before data is returned to the client. Sensitive credentials are kept in local configuration/secrets files rather than embedded in the frontend. Persistent data is stored in SQLite and seeded from the OpenFDA dataset; the patient, symptom, medication, and ticket tables provide local state across app sessions.
