@@ -12,7 +12,7 @@ For this course project, the EHR data is seeded by the team. Healthwatch will no
 ## Milestones
 |Week| Goal | Exit Evidence|
 |---|---|---|
-| 3 | Architecture, API, and Delivery plan |  |
+| 3 | Architecture, API, and Delivery plan | Mapped documentation plans; reviewed initial risks, responsibilities, and uncertainties |
 | 4 | Architecture, integration | Spike records; thin deployed skeleton; concept demo script|
 | 5 | Concept Demo + CI/testing | Patients report symptoms and see record of symptom; tests and reviewed build recorded|
 | 6 | Midterm check-in demo | check client-API integration and deployment of doctor interface functions and shared environment; rehearse check-in|
