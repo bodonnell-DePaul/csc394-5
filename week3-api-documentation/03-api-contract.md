@@ -48,7 +48,6 @@ Authorization: Bearer <access-token>
 | AT-04 | List patients symptoms | 403 |
 | AT-05 | Submit malformed JSON, or non-JSON body | 400 for malformed json; 415 for unsupported media type|
 | AT-06 | Rate limit, unexpected server error | safe 429/500 envelope; Retry-After on 429; no fake success|
-| AT-07 | View a known tickets details, request a nonexistent ticket; supply a malfo
-rmed path UUID | 200 with appropriate fields; 404 for missing ID; 400 for malformed pathID |
+| AT-07 | View a known tickets details, request a nonexistent ticket; supply a malformed path UUID | 200 with appropriate fields; 404 for missing ID; 400 for malformed pathID |
 
 
