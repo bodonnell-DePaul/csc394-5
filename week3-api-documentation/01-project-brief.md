@@ -10,7 +10,7 @@ The primary users for Healthwatch is the elderly or people living with a chronic
 For this course project, the EHR data is seeded by the team. Healthwatch will not be integrated with other healthcare applications to receive data. Neither will Healthwatch comply with the regulations necessary to legally handle medical data.
 
 The symptom logging workflow can be completed with a synthetic doctor and synthetic patient in a shared deployed environment. It will require the development of an adequate risk model
-## Key Features
+
 
 ## Roles
 | Member | Primary Role |
@@ -20,7 +20,7 @@ The symptom logging workflow can be completed with a synthetic doctor and synthe
 | Joshua Laguanas | Chief Designer |
 | Furqan Saddal | Project Manager |
 
-
+## Key Features
 
 ### Must-Have
 - Roles
