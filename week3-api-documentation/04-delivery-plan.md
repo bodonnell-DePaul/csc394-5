@@ -12,7 +12,7 @@ For this course project, the EHR data is seeded by the team. Healthwatch will no
 ## Milestones
 |Week| Goal | Exit Evidence|
 |---|---|---|
-| 3 | Architecture, API, and Delivery plan |  |
+| 3 | Architecture, API, and Delivery plan | Mapped documentation plans; reviewed initial risks, responsibilities, and uncertainties |
 | 4 | Architecture, integration | Spike records; thin deployed skeleton; concept demo script|
 | 5 | Concept Demo + CI/testing | Patients report symptoms and see record of symptom; tests and reviewed build recorded|
 | 6 | Midterm check-in demo | check client-API integration and deployment of doctor interface functions and shared environment; rehearse check-in|
@@ -25,27 +25,36 @@ For this course project, the EHR data is seeded by the team. Healthwatch will no
 ## User Story Backlog
 |ID & Priority| User story & Acceptance Criteria |Owner| Target & Dependencies|
 |---|---|---|---|
-| US-01/Must | As a patient, I can view my medical information so I can keep track my treatment progress | | |
-| US-02/Must | As a doctor, I can view my patient's medical information so I have all info to make a decision | | |
-| US-03/Must | As a patient, I can report symptoms easily so I can keep update my doctor to my current condition| | |
-| US-04/Must| As a doctor, I can view patients through a queue based on severity so I can focus on high-risk patients before lower priorities| | |
-| US-05/Should | As a user, I can message my counterpart in severe cases so that we can discuss the next steps urgently | | |
-| US-06/Should | As a doctor, I can schedule an appointment instantly so I can address the patient's symptoms when concerning symptoms suddenly appear | | |
-| US-07/Could | As a patient, I can be alerted by a notification, so I can remember to take my medication| | | 
-| US-08/Could | As a patient, I can select my symptoms through text box or dropdown so I can easily communicate my diagnosis| | | 
+| US-01/Must | As a patient, I can view my medical information so I can keep track my treatment progress | | W4 | 
+| US-02/Must | As a doctor, I can view my patient's medical information so I have all info to make a decision | | W5 |
+| US-03/Must | As a patient, I can report symptoms easily so I can keep update my doctor to my current condition| Ethan M | W4, EN-04 |
+| US-04/Must| As a doctor, I can view patients through a queue based on severity so I can focus on high-risk patients before lower priorities| | W5, EN-05 |
+| US-05/Should | As a user, I can message my counterpart in severe cases so that we can discuss the next steps urgently | | W6, EN-05 |
+| US-06/Could | As a patient, I can be alerted by a notification, so I can remember to take my medication| Ethan M| W6 | 
+
 ## Engineering Tasks 
 |ID| Task & Output | Owner | Target & Dependencies|
 |---|---|---|---|
-|EN-00 | Initial repository setup, FastAPI/Client linting, and a local health-endpoint cURL check| | W4, no dependencies.
+| EN-01 | Initial repository setup, FastAPI/Client linting, and a local health-endpoint cURL check| Ethan M| W4, no dependencies.|
+| EN-02 | Identity-provider token spike | | W5, EN-01|
+| EN-03 | Automate all acceptance tests | Ethan M | W5 |
+| EN-04 | Data normalization of the OpenFDA's Drug Adverse Event database | Ethan M | W4|
+| EN-05 | Develop the backend risk calculator based on OpenFDA's Drug Adverse Event database|  | W5, EN-04|
 
 ## Definition of Done
 - Acceptance criteria pass
 - Lint, type checks, and unit/API test pass
 - Documentation updated to match behaviour
-- The change is integrated in shared environment when the environment exists.
+- the change is integrated in shared environment when the environment exists.
+  
 ## Testing, CI/CD, and release plan
-Week 5: install lint; type check; unit tests; example validation. Use synthetic accounts for isolated test;
+Week 5: implement lint; type check; unit tests; example validation. Use synthetic accounts and databases for isolated tests; 
+Week 6: setup shared deployed environment; initial test runs on deployed doctor features; establish consistency and compatibility through versions; ensure functionality and revise core features
+Week 7 & 8: finalize deployment triggers; run additional security and performance tests; review end to end processes for bugs; test other non-required features;
 
 ## Risks
-
-## Fallback plan
+| Risks | Fallback | Owner |
+|---|---|---|
+|Data Inconsistency | Spike for data normalization and processing| Ethan M |
+|Scope Creep Delays Development| maintain strict development guidelines; delay optional feature development | |
+|Key Member becomes unavailable| rearrange owners of tasks; update documentation; inform the owner| |
