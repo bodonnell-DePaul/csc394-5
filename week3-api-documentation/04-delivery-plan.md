@@ -30,7 +30,7 @@ For this course project, the EHR data is seeded by the team. Healthwatch will no
 | US-03/Must | As a patient, I can report symptoms easily so I can keep update my doctor to my current condition| Ethan M | W4, EN-04 |
 | US-04/Must| As a doctor, I can view patients through a queue based on severity so I can focus on high-risk patients before lower priorities| | W5, EN-05 |
 | US-05/Should | As a user, I can message my counterpart in severe cases so that we can discuss the next steps urgently | | W6, EN-05 |
-| US-06/Could | As a patient, I can be alerted by a notification, so I can remember to take my medication| | W6 | 
+| US-06/Could | As a patient, I can be alerted by a notification, so I can remember to take my medication| Ethan M| W6 | 
 
 ## Engineering Tasks 
 |ID| Task & Output | Owner | Target & Dependencies|
