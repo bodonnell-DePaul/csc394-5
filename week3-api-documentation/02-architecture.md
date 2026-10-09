@@ -32,18 +32,18 @@ Component | Owns | Does Not Own|
 
 ## Data Entities & Relationships
 - patients: id, name, gender, birthdate
+- patient_medications: id, patient_id, medication_id, start_date, end_date
 - symptom_report: id, owner_id, timestamp,
 - symptom_report_symptoms: id, symptom_id, severity
 - symptom_report_medications: id, medication_id
 - medications: id, name, manufacturer
-- patient_medications: id, patient_id, medication_id, date, status
-- ticket: id, time_stamp, patient_id, symptom_report_ids, severity, status
 - symptoms: id, term
+- ticket: id, time_stamp, patient_id, symptom_report_ids, severity, status
 
-Each patient owns multiple symptom logs, and medications. Each symptom log references one or more medications and symptoms. Each ticket owns one symptom reports.
+Each patient owns multiple symptom logs, and medications. Each symptom log references one or more medications and symptoms. Each ticket owns one symptom reports. The patient medications end_date attribute remains null until API updates it.
 
 ## Authentication, Authorization, Secrets, & Persistent Data
-Authentication relies on lightweight JSON Web Tokens (JWT) generated after validating pre-seeded synthetic credentials for patients and doctors. Authorization is strictly enforced using role-based access controls before data is returned to the client. Sensitive credentials are kept in local configuration/secrets files rather than embedded in the frontend. Persistent data is stored in SQLite and seeded from the OpenFDA dataset; the patient, symptom, medication, and ticket tables provide local state across app sessions.
+Authentication relies on lightweight JSON Web Tokens (JWT) generated after validating pre-seeded synthetic credentials for patients and doctors. Authorization is strictly enforced using role-based access controls before data is returned to the client. Patients will only be able to access their personal health records and push symptom logs. Doctors will be able to access all patient health records and update tickets. Sensitive credentials are kept in local configuration/secrets files rather than embedded in the frontend. Persistent data is stored in SQLite and seeded from the OpenFDA dataset; the patient, symptom, medication, and ticket tables provide local state across app sessions.
 
 ## Decisions & Tradeoffs
 SQLite was chosen to ensure zero-configuration deployment and quick local setup, accepting the tradeoff that write concurrency is limited under heavy loads. The team opted to pre-load a normalized subset of the OpenFDA dataset into SQLite so the application can access historical patient and adverse event information without requiring a separate API server. The Python backend runs as a data-loading script at initialization rather than as a persistent service.
