@@ -4,6 +4,10 @@
 
 ```mermaid
 flowchart LR
+    subgraph Auth["Authentication Layer"]
+        AuthService["JWT Auth Service<br/>Validates credentials<br/>Generates tokens<br/>Enforces role-based access"]
+    end
+
     subgraph Client["Client Layer"]
         UI["React Client<br/>Displays messages, medical information,<br/>severity queues, and symptom report form"]
     end
@@ -17,32 +21,38 @@ flowchart LR
         SQLite["SQLite Database<br/>patients, symptom_reports, medications, tickets"]
     end
 
+    UI -->|"Authenticate with credentials"| AuthService
+    AuthService -->|"Issue JWT token"| UI
+    UI -->|"Include token in requests"| Backend
+    Backend -->|"Verify token"| AuthService
     Dataset --> PY
     PY --> SQLite
-    UI <-->|"Read and write patient, medication, and ticket records"| SQLite
+    Backend <-->|"Read and write patient, medication,<br/>and ticket records with role-based access"| SQLite
 ```
 
 Component Descriptions
 
-Component | Owns | Does Not Own|
+| Component | Owns | Does Not Own |
 |---|---|---|
-|React Client| displays messages, medical information, and severity queues; symptom report form access| database access|
-|Python Backend / ETL| loads and normalizes the OpenFDA dataset; validates symptom severity matching; writes to SQLite| user interface behavior; decision-making on behalf of doctors|
-|SQLite + OpenFDA Drug Event Data Set| provides past information of patients, drug use, their physicians, and logged side effects; stores normalized patient, medication, symptom, and ticket records| direct application logic|
+| JWT Auth Service | credential validation; token generation; role-based access enforcement; token verification | user interface; database management |
+| React Client | displays messages, medical information, and severity queues; symptom report form access; manages auth tokens | database access; authentication logic |
+| Python Backend / ETL | loads and normalizes the OpenFDA dataset; validates symptom severity matching; writes to SQLite; verifies incoming JWT tokens | user interface behavior; decision-making on behalf of doctors; credential management |
+| SQLite + OpenFDA Drug Event Data Set | provides past information of patients, drug use, their physicians, and logged side effects; stores normalized patient, medication, symptom, and ticket records | authentication; access control decisions |
 
 ## Data Entities & Relationships
-- patients: id, name, gender, birthdate, current medication_ids
-- symptom report: id, owner_id, timestamp, current_medication_ids , symptoms
+- patients: id, name, gender, birthdate, role
+- patient_medications: id, patient_id, medication_id, start_date, end_date
+- symptom_report: id, owner_id, timestamp
+- symptom_report_symptoms: id, symptom_id, severity
+- symptom_report_medications: id, medication_id
 - medications: id, name, manufacturer
-- ticket: id, patient_id, symptom_report_ids, severity, status
+- symptoms: id, term
+- ticket: id, time_stamp, patient_id, symptom_report_ids, severity, status
 
-Each patient owns multiple patient logs. Each symptom log references one or more medications. Each ticket owns one patient and references symptoms.
+Each patient owns multiple symptom logs and medications. Each symptom log references one or more medications and symptoms. Each ticket owns one symptom report. The patient medications end_date attribute tracks medication duration. Role-based access is enforced at the backend layer.
 
 ## Authentication, Authorization, Secrets, & Persistent Data
-Authentication relies on lightweight JSON Web Tokens (JWT) generated after validating pre-seeded synthetic credentials for patients and doctors. Authorization is strictly enforced using role-based access controls before data is returned to the client. Sensitive credentials are kept in local configuration/secrets files rather than embedded in the frontend. Persistent data is stored in SQLite and seeded from the OpenFDA dataset; the patient, symptom, medication, and ticket tables provide local state across app sessions.
+Authentication relies on lightweight JSON Web Tokens (JWT) generated after validating pre-seeded synthetic credentials for patients and doctors. Authorization is strictly enforced using role-based access control (RBAC) at the backend layer. The Auth Service validates all credentials against pre-seeded user records and issues JWTs for authenticated sessions. The React Client stores tokens in secure, httpOnly cookies and includes them in all API requests. The Python Backend verifies token validity before processing requests, ensuring only authenticated and authorized users can access patient records and create tickets.
 
 ## Decisions & Tradeoffs
-SQLite was chosen to ensure zero-configuration deployment and quick local setup, accepting the tradeoff that write concurrency is limited under heavy loads. The team opted to pre-load a normalized subset of the OpenFDA dataset into SQLite so the application can access historical patient and adverse event information without requiring a separate API server. The Python backend runs as a data-loading script at initialization rather than as a persistent service.
-
-## Technical Risks and Unknowns
-The primary technical risk involves unstandardized or inconsistent symptom terms within the OpenFDA adverse drug event dataset, which will be mitigated by a technical spike dedicated to cleaning and normalizing symptom names before they are stored in SQLite.
+SQLite was chosen to ensure zero-configuration deployment and quick local setup, accepting the tradeoff that write concurrency is limited under heavy loads. The team opted to pre-load a normalized subset of the OpenFDA dataset to avoid external API dependencies during development. JWT authentication was selected for its stateless nature, making it ideal for a lightweight local deployment without requiring a separate session store.
