@@ -39,6 +39,34 @@ Authorization: Bearer <access-token>
     
 ~~~
 
+## Patient symptom-reporting demo
+
+The vertical-slice demo implements only symptom reporting for one fixed synthetic patient. It does not implement authentication; it must not be used with real health information.
+
+`GET /api/symptoms` returns the symptom choices supported by the form.
+
+`POST /api/symptom_report` accepts `application/json` with exactly these fields:
+
+```json
+{
+  "patientID": "11111111-1111-2111-6111-111111111111",
+  "symptoms": ["Nausea", "Headache"]
+}
+```
+
+At least one supported symptom is required. A successful response is `200` and contains the persisted report, including its ID and server-generated UTC timestamp:
+
+```json
+{
+  "symptom_report": {
+    "id": "generated-uuid",
+    "patientID": "11111111-1111-2111-6111-111111111111",
+    "timestamp": "2026-10-10T21:00:00Z",
+    "symptoms": ["Nausea", "Headache"]
+  }
+}
+```
+
 ## Acceptance tests
 |ID|Action|Success|
 |---|---|---|
