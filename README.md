@@ -7,6 +7,11 @@ API
 - GET /api/symptoms returns the symptom choices shown by the form.
 - GET / returns the demo UI for symptom logging.
 
+MCP
+- Streamable HTTP MCP endpoint: `http://127.0.0.1:8000/mcp`.
+- Tools provide patient profile, symptom choices, report submission, report history, and report summary operations.
+- MCP tools use the same demo patient, validation, and SQLite report store as the REST API.
+
 HTTP errors
 - Invalid request bodies or query parameters return 422.
 - Unknown patient IDs return 404.
@@ -37,6 +42,7 @@ Project structure
 - src/config.py: shared app constants and synthetic patient profile
 - src/server/database.py: SQLite access and report persistence
 - src/routes/routes.py: endpoint definitions
+- src/routes/mcp.py: FastMCP tool definitions mounted at /mcp
 - src/middleware/schemas.py: request validation models
 - src/public/: browser UI assets
 - frontend/src/: React client source
