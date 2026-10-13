@@ -4,7 +4,7 @@ This vertical slice demonstrates one patient feature: select symptoms, submit a 
 
 ## API
 
-<<<<<<< HEAD
+
 HTTP errors
 - Invalid request bodies or query parameters return 422.
 - Unknown patient IDs return 404.
@@ -44,6 +44,5 @@ Project structure
 - `POST /api/symptom_report` creates a report for the demo patient.
 - `GET /api/symptom_report?limit=20&offset=0` lists that patient's saved reports.
 - `GET /api/symptoms` returns the symptom choices shown by the form.
->>>>>>> 7c5d7d93290985993fdee4d0746c17a627c38af6
 
 The demo intentionally uses synthetic data only and is not suitable for real patient information or clinical use.
