@@ -56,6 +56,3 @@ Authentication relies on lightweight JSON Web Tokens (JWT) generated after valid
 
 ## Decisions & Tradeoffs
 SQLite was chosen to ensure zero-configuration deployment and quick local setup, accepting the tradeoff that write concurrency is limited under heavy loads. The team opted to pre-load a normalized subset of the OpenFDA dataset to avoid external API dependencies during development. JWT authentication was selected for its stateless nature, making it ideal for a lightweight local deployment without requiring a separate session store.
-
-## Technical Risks and Unknowns
-The primary technical risk involves unstandardized or inconsistent symptom terms within the OpenFDA adverse drug event dataset, which will be mitigated by a technical spike dedicated to cleaning and normalization. Secondary risks include ensuring token expiration and refresh mechanisms are properly implemented to maintain security without sacrificing user experience.

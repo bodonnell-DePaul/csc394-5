@@ -1,12 +1,10 @@
-# csc394-5
+# Healthwatch symptom-reporting demo
+
 This vertical slice demonstrates one patient feature: select symptoms, submit a report, and see the saved report in the patient's history. It uses a fixed synthetic patient and stores reports in SQLite. It does not include authentication, doctor views, diagnosis, or treatment recommendations.
 
-API
-- POST /api/symptom_report creates a report for the demo patient.
-- GET /api/symptom_report?limit=20&offset=0 lists that patient's saved reports.
-- GET /api/symptoms returns the symptom choices shown by the form.
-- GET / returns the demo UI for symptom logging.
+## API
 
+<<<<<<< HEAD
 MCP
 - Streamable HTTP MCP endpoint: `http://127.0.0.1:8000/mcp`.
 - Tools provide patient profile, symptom choices, report submission, report history, and report summary operations.
@@ -48,5 +46,10 @@ Project structure
 - frontend/src/: React client source
 - vite.config.js: Vite development proxy and production build configuration
 - src/data/healthwatch.db: demo database
+=======
+- `POST /api/symptom_report` creates a report for the demo patient.
+- `GET /api/symptom_report?limit=20&offset=0` lists that patient's saved reports.
+- `GET /api/symptoms` returns the symptom choices shown by the form.
+>>>>>>> 7c5d7d93290985993fdee4d0746c17a627c38af6
 
 The demo intentionally uses synthetic data only and is not suitable for real patient information or clinical use.

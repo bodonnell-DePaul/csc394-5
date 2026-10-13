@@ -39,6 +39,21 @@ Authorization: Bearer <access-token>
     
 ~~~
 
+## Patient symptom-reporting demo
+
+The vertical-slice demo implements only symptom reporting for one fixed synthetic patient. It does not implement authentication; it must not be used with real health information.
+
+`GET /api/symptoms` returns the symptom choices supported by the form.
+
+`POST /api/symptom_report` accepts `application/json` with exactly these fields:
+
+```json
+{
+  "patientID": "11111111-1111-2111-6111-111111111111",
+  "symptoms": ["Nausea", "Headache"]
+}
+
+
 ## Acceptance tests
 |ID|Action|Success|
 |---|---|---|
@@ -49,5 +64,3 @@ Authorization: Bearer <access-token>
 | AT-05 | Submit malformed JSON, or non-JSON body | 400 for malformed json; 415 for unsupported media type|
 | AT-06 | Rate limit, unexpected server error | safe 429/500 envelope; Retry-After on 429; no fake success|
 | AT-07 | View a known tickets details, request a nonexistent ticket; supply a malformed path UUID | 200 with appropriate fields; 404 for missing ID; 400 for malformed pathID |
-
-

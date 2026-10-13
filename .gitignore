@@ -1,2 +1,5 @@
-node_modules/
-/src/public/*
+src/data/healthwatch.sqlite3
+src/data/healthwatch.sqlite3-shm
+src/data/healthwatch.sqlite3-wal
+__pycache__/
+*.py[cod]
