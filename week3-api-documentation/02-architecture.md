@@ -21,20 +21,12 @@ flowchart LR
         SQLite["SQLite Database<br/>patients, symptom_reports, medications, tickets"]
     end
 
-    UI -->|"Authenticate with credentials"| AuthService
-    AuthService -->|"Issue JWT token"| UI
-    UI -->|"Include token in requests"| Backend
-    Backend -->|"Verify token"| AuthService
-    Dataset --> PY
-    PY --> SQLite
-    Backend <-->|"Read and write patient, medication,<br/>and ticket records with role-based access"| SQLite
 ```
 
 Component Descriptions
 
 | Component | Owns | Does Not Own |
 |---|---|---|
-| JWT Auth Service | credential validation; token generation; role-based access enforcement; token verification | user interface; database management |
 | React Client | displays messages, medical information, and severity queues; symptom report form access; manages auth tokens | database access; authentication logic |
 | Python Backend / ETL | loads and normalizes the OpenFDA dataset; validates symptom severity matching; writes to SQLite; verifies incoming JWT tokens | user interface behavior; decision-making on behalf of doctors; credential management |
 | SQLite + OpenFDA Drug Event Data Set | provides past information of patients, drug use, their physicians, and logged side effects; stores normalized patient, medication, symptom, and ticket records | authentication; access control decisions |
