@@ -45,7 +45,8 @@ Component Descriptions
 Each patient owns multiple symptom logs and medications. Each symptom log references one or more medications and symptoms. Each ticket owns one symptom report. The patient medications end_date attribute tracks medication discontinuation or change.
 
 ## Authentication, Authorization, Secrets, & Persistent Data
-Authentication relies on lightweight JSON Web Tokens (JWT) generated after validating pre-seeded synthetic credentials for patients and doctors. Authorization is strictly enforced using role-based access checks before exposing patient or doctor data.
+Authentication relies on lightweight JSON Web Tokens (JWT) generated after validating pre-seeded synthetic credentials for patients and doctors. Authorization is strictly enforced using role-based access control (RBAC) at the backend layer. The Auth Service validates all credentials against pre-seeded user records and issues JWTs for authenticated sessions. The React Client stores tokens in secure, httpOnly cookies and includes them in all API requests. The Python Backend verifies token validity before processing requests, ensuring only authenticated and authorized users can access patient records and create tickets.
 
 ## Decisions & Tradeoffs
-SQLite was chosen to ensure zero-configuration deployment and quick local setup, accepting the tradeoff that write concurrency is limited under heavy loads. The team opted to pre-load a normalized subset of OpenFDA data to keep the application deterministic and easy to inspect during development.
+SQLite was chosen to ensure zero-configuration deployment and quick local setup, accepting the tradeoff that write concurrency is limited under heavy loads. The team opted to pre-load a normalized subset of the OpenFDA dataset to avoid external API dependencies during development. JWT authentication was selected for its stateless nature, making it ideal for a lightweight local deployment without requiring a separate session store.
+
