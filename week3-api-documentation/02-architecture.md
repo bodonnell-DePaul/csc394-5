@@ -4,10 +4,6 @@
 
 ```mermaid
 flowchart LR
-    subgraph Auth["Authentication Layer"]
-        AuthService["JWT Auth Service<br/>Validates credentials<br/>Generates tokens<br/>Enforces role-based access"]
-    end
-
     subgraph Client["Client Layer"]
         UI["React Client<br/>Displays messages, medical information,<br/>severity queues, and symptom report form"]
     end
