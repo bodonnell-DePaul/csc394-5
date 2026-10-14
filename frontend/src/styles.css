@@ -23,7 +23,8 @@ body {
 }
 
 button,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -106,45 +107,42 @@ textarea {
   font-weight: 700;
 }
 
-.symptom-field {
-  padding: 0;
-  border: 0;
-}
-
-.symptom-field legend {
-  padding: 0;
-}
-
-.field textarea {
+.field textarea,
+.field select {
   width: 100%;
   min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
+}
+
+.field select {
+  min-height: 44px;
+  color: inherit;
+  background: white;
+}
+
+.field textarea {
   resize: vertical;
 }
 
-.checklist {
+.selected-symptoms {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
-  gap: 10px;
+  gap: 8px;
+  padding: 0;
+  margin: 10px 0 0;
+  list-style: none;
 }
 
-.checkbox-item {
+.selected-symptom {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 10px 12px;
-  background: #f9fbfe;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  background: #f7faff;
   border: 1px solid var(--border);
   border-radius: 10px;
-}
-
-.checkbox-item input {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
 }
 
 .button-row {
@@ -171,13 +169,23 @@ button:hover {
 
 button:focus-visible,
 input:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+select:focus-visible {
   outline: 3px solid #4b91e2;
   outline-offset: 2px;
 }
 
-.button-danger {
-  background: var(--error);
+.remove-symptom {
+  min-height: 36px;
+  padding: 8px 10px;
+  color: var(--primary-dark);
+  font-size: 0.9rem;
+  background: #eaf3ff;
+}
+
+.remove-symptom:hover {
+  color: white;
+  background: var(--primary-dark);
 }
 
 .status {
@@ -193,10 +201,6 @@ textarea:focus-visible {
 
 .status.success {
   color: var(--success);
-}
-
-.history-clear {
-  margin-bottom: 16px;
 }
 
 .history-item {

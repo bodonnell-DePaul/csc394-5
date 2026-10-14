@@ -19,6 +19,8 @@ async function requestJson(url, options) {
 function App() {
   const [patient, setPatient] = useState(null);
   const [symptoms, setSymptoms] = useState([]);
+  const [symptomChoice, setSymptomChoice] = useState('');
+  const [selectedSymptoms, setSelectedSymptoms] = useState([]);
   const [reports, setReports] = useState([]);
   const [summary, setSummary] = useState(null);
   const [status, setStatus] = useState(null);
@@ -68,7 +70,6 @@ function App() {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const selectedSymptoms = formData.getAll('symptom');
 
     if (!selectedSymptoms.length) {
       setStatus({
@@ -89,22 +90,9 @@ function App() {
       });
 
       form.reset();
+      setSymptomChoice('');
+      setSelectedSymptoms([]);
       setStatus({ message: 'Symptom report saved.', isError: false });
-      await refreshHistory();
-    } catch (error) {
-      setStatus({ message: error.message, isError: true });
-    }
-  }
-
-  async function clearReportHistory() {
-    try {
-      const result = await requestJson('/api/symptom_report', {
-        method: 'DELETE',
-      });
-      setStatus({
-        message: `Cleared ${result.deleted_rows} saved report(s).`,
-        isError: false,
-      });
       await refreshHistory();
     } catch (error) {
       setStatus({ message: error.message, isError: true });
@@ -115,7 +103,6 @@ function App() {
     <div className="container">
       <header className="hero">
         <h1>Healthwatch Demo</h1>
-        <p>Patient symptom logging for a synthetic demo patient.</p>
       </header>
 
       <main className="grid">
@@ -127,7 +114,6 @@ function App() {
                 <Stat label="Patient" value={patient.name} />
                 <Stat label="Age" value={patient.age} />
                 <Stat label="Gender" value={patient.gender} />
-                <Stat label="Condition" value={patient.condition} />
                 <Stat label="Care team" value={patient.care_team} />
               </>
             ) : (
@@ -138,21 +124,49 @@ function App() {
           <h2>Submit a symptom report</h2>
           <form onSubmit={submitReport}>
             <div className="field">
-              <span className="field-label">Patient</span>
-              <div>{patient?.id || 'Loading patient ID…'}</div>
-            </div>
-
-            <fieldset className="field symptom-field">
-              <legend className="field-label">Select symptoms</legend>
-              <div className="checklist">
+              <label className="field-label" htmlFor="symptom-select">
+                Add a symptom
+              </label>
+              <select
+                id="symptom-select"
+                value={symptomChoice}
+                onChange={(event) => {
+                  const symptom = event.target.value;
+                  setSymptomChoice('');
+                  if (symptom && !selectedSymptoms.includes(symptom)) {
+                    setSelectedSymptoms([...selectedSymptoms, symptom]);
+                  }
+                }}
+              >
+                <option value="">Choose a symptom</option>
                 {symptoms.map((symptom) => (
-                  <label className="checkbox-item" key={symptom}>
-                    <input type="checkbox" name="symptom" value={symptom} />
-                    <span>{symptom}</span>
-                  </label>
+                  <option key={symptom} value={symptom}>
+                    {symptom}
+                  </option>
                 ))}
-              </div>
-            </fieldset>
+              </select>
+              {selectedSymptoms.length > 0 && (
+                <ul className="selected-symptoms" aria-label="Selected symptoms">
+                  {selectedSymptoms.map((symptom) => (
+                    <li className="selected-symptom" key={symptom}>
+                      <span>{symptom}</span>
+                      <button
+                        type="button"
+                        className="remove-symptom"
+                        aria-label={`Remove ${symptom}`}
+                        onClick={() =>
+                          setSelectedSymptoms(
+                            selectedSymptoms.filter((item) => item !== symptom),
+                          )
+                        }
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             <div className="field">
               <label className="field-label" htmlFor="report-notes">
@@ -169,13 +183,6 @@ function App() {
 
             <div className="button-row">
               <button type="submit">Submit report</button>
-              <button
-                type="button"
-                className="button-danger"
-                onClick={clearReportHistory}
-              >
-                Clear database
-              </button>
             </div>
             <div
               className={`status${status?.isError ? ' error' : status ? ' success' : ''}`}
@@ -198,20 +205,12 @@ function App() {
               />
             </div>
           )}
-          <button
-            type="button"
-            className="button-danger history-clear"
-            onClick={clearReportHistory}
-          >
-            Clear saved history
-          </button>
           <div>
             {reports.length === 0 ? (
               <p>No symptom reports saved yet.</p>
             ) : (
               reports.map((report) => (
                 <article className="history-item" key={report.id}>
-                  <h3>Report #{report.id}</h3>
                   <div className="meta">
                     Submitted: {new Date(report.submitted_at).toLocaleString()}
                   </div>
