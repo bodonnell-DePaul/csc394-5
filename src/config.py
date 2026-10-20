@@ -1,0 +1,27 @@
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+STATIC_DIR = PROJECT_ROOT / "src" / "public"
+DB_PATH = PROJECT_ROOT / "src" / "data" / "healthwatch.db"
+
+FIXED_PATIENT_ID = "11111111-1111-2111-6111-111111111111"
+PATIENT_PROFILE = {
+    "id": FIXED_PATIENT_ID,
+    "name": "Alex Morgan",
+    "age": 63,
+    "gender": "Male",
+    "condition": "Medication monitoring",
+    "care_team": "Dr. Elena Brooks",
+}
+AVAILABLE_SYMPTOMS = [
+    "Dizziness",
+    "Fatigue",
+    "Headache",
+    "Nausea",
+    "Rash",
+    "Shortness of breath",
+    "Sleep disturbance",
+    "Swelling",
+    "Tremor",
+    "Vomiting",
+]
