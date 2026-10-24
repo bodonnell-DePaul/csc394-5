@@ -1,8 +1,8 @@
 import logging
 import sqlite3
-from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -26,7 +26,7 @@ async def handle_database_error(request: Request, exc: sqlite3.Error) -> JSONRes
 async def handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors()},
+        content={"detail": jsonable_encoder(exc.errors())},
     )
 
 

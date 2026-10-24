@@ -46,3 +46,18 @@ Project structure
 - `GET /api/symptoms` returns the symptom choices shown by the form.
 
 The demo intentionally uses synthetic data only and is not suitable for real patient information or clinical use.
+
+## Tests
+
+Install the development dependencies and run the API unit and integration tests:
+
+```sh
+python -m pip install -r requirements-dev.txt
+python -m unittest discover --start-directory tests --verbose
+```
+
+Run Python linting and type checking with `python -m ruff check src tests` and
+`python -m mypy src tests`. Lint and build the client with `npm ci`,
+`npm run lint`, and `npm run build`. GitHub Actions runs the Python tests, lint,
+and type checks, plus the client lint and build, on pushes, pull requests, and
+manual runs.

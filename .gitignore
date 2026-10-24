@@ -3,3 +3,5 @@ src/data/healthwatch.sqlite3-shm
 src/data/healthwatch.sqlite3-wal
 __pycache__/
 *.py[cod]
+node_modules/
+.venv/
