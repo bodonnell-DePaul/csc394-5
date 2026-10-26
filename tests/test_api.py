@@ -35,6 +35,20 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"symptoms": AVAILABLE_SYMPTOMS})
 
+    def test_requests_are_logged_with_method_path_and_status(self):
+        with self.assertLogs("uvicorn.error", level=logging.INFO) as captured:
+            success_response = self.client.get("/health")
+            error_response = self.client.get(
+                "/api/symptom_report",
+                params={"patient_id": "unknown"},
+            )
+
+        self.assertEqual(success_response.status_code, 200)
+        self.assertEqual(error_response.status_code, 404)
+        output = "\n".join(captured.output)
+        self.assertIn("GET /health completed with status 200", output)
+        self.assertIn("GET /api/symptom_report completed with status 404", output)
+
     def test_create_then_list_report_preserves_json_data_and_page_schema(self):
         create_response = self.client.post(
             "/api/symptom_report",
