@@ -140,3 +140,21 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(response.json(), {"detail": "A database error occurred."})
         self.assertIn("private database details", "\n".join(captured.output))
         self.assertNotIn("private database details", response.text)
+
+    def test_type_error_returns_safe_json_error_and_logs_details(self):
+        def fail_to_list(*args, **kwargs):
+            raise TypeError("private type error details")
+
+        with patch.object(routes, "list_symptom_reports", fail_to_list):
+            with self.assertLogs(
+                "src.middleware.error_handlers", level=logging.ERROR
+            ) as captured:
+                response = self.client.get("/api/symptom_report")
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json(),
+            {"detail": "An internal server error occurred."},
+        )
+        self.assertIn("private type error details", "\n".join(captured.output))
+        self.assertNotIn("private type error details", response.text)
