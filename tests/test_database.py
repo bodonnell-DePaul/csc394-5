@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 import tempfile
 import unittest
@@ -62,6 +63,23 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(next_reports, [first])
         self.assertEqual(reports[0]["notes"], "Follow up")
         self.assertEqual(reports[0]["symptoms"], ["Headache"])
+
+    def test_successful_database_operations_are_logged_without_report_data(self):
+        with self.assertLogs("uvicorn.error", level=logging.INFO) as captured:
+            database.init_db()
+            database.save_symptom_report("patient-a", ["Private symptom"], "Private note")
+            database.list_symptom_reports("patient-a", limit=20, offset=0)
+            database.get_report_summary("patient-a")
+            database.clear_symptom_reports("patient-a")
+
+        output = "\n".join(captured.output)
+        self.assertIn("initialize schema", output)
+        self.assertIn("save symptom report", output)
+        self.assertIn("list symptom reports", output)
+        self.assertIn("get report summary", output)
+        self.assertIn("clear symptom reports", output)
+        self.assertNotIn("Private symptom", output)
+        self.assertNotIn("Private note", output)
 
     def test_summary_and_patient_scoped_clear(self):
         database.save_symptom_report("patient-a", ["Nausea", "Headache"])
