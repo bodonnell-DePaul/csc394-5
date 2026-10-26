@@ -18,7 +18,7 @@ async def handle_database_error(request: Request, exc: Exception) -> JSONRespons
         exc_info=(type(exc), exc, exc.__traceback__),
     )
     return JSONResponse(
-        status_code=503,
+        status_code=500,
         content={"detail": "A database error occurred."},
     )
 
