@@ -18,6 +18,7 @@ HTTP errors
 - Unknown patient IDs return 404.
 - Successful symptom report creation returns 201.
 - Database failures return 500 with a generic message; the server logs the underlying error.
+- The server logs each request's method, path, status code, and duration; query parameters and request bodies are not logged.
 - Reports may include optional notes up to 1,000 characters; notes are saved with report history.
 
 Demo setup

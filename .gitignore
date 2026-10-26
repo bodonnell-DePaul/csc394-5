@@ -4,3 +4,5 @@ src/data/healthwatch.sqlite3-wal
 __pycache__/
 node_modules/
 *.py[cod]
+node_modules/
+.venv/
