@@ -63,3 +63,34 @@ In order to allow doctors to make instantaneous changes such as changing prescri
 4. run_terminal_command: runs integration tests to ensure that notifications are triggered once doctors make alterations.
 5. 
 
+
+
+## Doctor dashboard (synthetic demo only)
+
+The frontend has **Patient view** and **Doctor view** buttons. Doctor view displays
+the fixed synthetic patient's latest 100 reports, pending/reviewed counts, symptom
+history, patient notes, and a doctor-only review-notes editor. Doctors can save
+notes and mark reports reviewed or pending, with changes persisted in SQLite.
+Patients still submit reports through the original form, and the patient history
+API does not return doctor notes.
+
+New demo API endpoints:
+- `GET /api/doctor/dashboard?limit=20&offset=0` returns the synthetic patient,
+  report counts, and paginated reports including doctor notes.
+- `PATCH /api/doctor/reports/{report_id}` accepts JSON
+  `{"review_status":"reviewed","doctor_note":"Reviewed for follow-up"}`.
+  Valid statuses are `pending` and `reviewed`. Notes must be 1,000 characters
+  or fewer. Unknown report IDs return 404; invalid input returns 422.
+- The existing SQLite database gains `review_status` and `doctor_note`
+  columns automatically when the application starts.
+
+**Security limitation:** Switching views is NOT authentication. These API
+endpoints have no authorization; the doctor dashboard must not be exposed
+with real patient records. Only synthetic demo data should be used.
+No diagnosis, treatment, prescription changes, or clinical priority algorithm
+is implemented. Real doctor accounts, role-based authorization, and patient
+data isolation must be implemented before any clinical usage.
+
+Test the review workflow using
+`python -m unittest discover -s tests -p "test_doctor_dashboard.py" -v`
+(with FastAPI's TestClient dependency `httpx` installed).
