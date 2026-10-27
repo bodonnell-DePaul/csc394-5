@@ -127,3 +127,133 @@ class DoctorDashboardTests(unittest.TestCase):
             json={"review_status": "urgent", "doctor_note": ""},
         )
         self.assertEqual(invalid.status_code, 422)
+
+    def test_dashboard_paginates_and_includes_review_details(self):
+        first = database.save_symptom_report(
+            FIXED_PATIENT_ID, ["Nausea"], "First patient note"
+        )
+        second = database.save_symptom_report(
+            FIXED_PATIENT_ID, ["Headache"], "Second patient note"
+        )
+        third = database.save_symptom_report(
+            FIXED_PATIENT_ID, ["Fatigue"], "Third patient note"
+        )
+        database.update_report_review(
+            second["id"], FIXED_PATIENT_ID, "reviewed", "Check in tomorrow"
+        )
+        self.login("doctor")
+
+        response = self.client.get(
+            "/api/doctor/dashboard",
+            params={"limit": 1, "offset": 1},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["patient"]["id"], FIXED_PATIENT_ID)
+        self.assertEqual(body["summary"]["total_reports"], 3)
+        self.assertEqual(body["review_counts"], {"pending": 2, "reviewed": 1})
+        self.assertEqual(body["page"], {"limit": 1, "offset": 1, "total": 3})
+        self.assertEqual(len(body["reports"]), 1)
+        self.assertEqual(
+            body["reports"][0],
+            {
+                **second,
+                "review_status": "reviewed",
+                "doctor_note": "Check in tomorrow",
+            },
+        )
+        self.assertNotEqual(body["reports"][0]["id"], first["id"])
+        self.assertNotEqual(body["reports"][0]["id"], third["id"])
+
+    def test_review_endpoint_rejects_patients_and_oversized_notes(self):
+        report = database.save_symptom_report(FIXED_PATIENT_ID, ["Nausea"])
+        self.login("patient")
+
+        forbidden = self.client.patch(
+            f"/api/doctor/reports/{report['id']}",
+            json={"review_status": "reviewed", "doctor_note": "Not allowed"},
+        )
+        self.assertEqual(forbidden.status_code, 403)
+
+        self.client.post("/api/auth/logout")
+        self.login("doctor")
+        invalid_note = self.client.patch(
+            f"/api/doctor/reports/{report['id']}",
+            json={"review_status": "reviewed", "doctor_note": "x" * 1001},
+        )
+        self.assertEqual(invalid_note.status_code, 422)
+
+        reports, total = database.list_symptom_reports(
+            FIXED_PATIENT_ID, limit=20, offset=0, include_doctor_notes=True
+        )
+        self.assertEqual(total, 1)
+        self.assertEqual(reports[0]["review_status"], "pending")
+        self.assertEqual(reports[0]["doctor_note"], "")
+
+    def test_doctor_routes_require_auth_and_validate_pagination_and_report_id(self):
+        unauthenticated_review = self.client.patch(
+            "/api/doctor/reports/1",
+            json={"review_status": "reviewed", "doctor_note": ""},
+        )
+        self.assertEqual(unauthenticated_review.status_code, 401)
+
+        self.login("doctor")
+        for params in ({"limit": 0}, {"limit": 101}, {"offset": -1}):
+            with self.subTest(params=params):
+                response = self.client.get(
+                    "/api/doctor/dashboard",
+                    params=params,
+                )
+                self.assertEqual(response.status_code, 422)
+
+        invalid_report_id = self.client.patch(
+            "/api/doctor/reports/not-a-number",
+            json={"review_status": "reviewed", "doctor_note": ""},
+        )
+        self.assertEqual(invalid_report_id.status_code, 422)
+
+    def test_empty_doctor_note_is_saved_when_reviewing_report(self):
+        report = database.save_symptom_report(
+            FIXED_PATIENT_ID, ["Nausea"], "Patient report note"
+        )
+        self.login("doctor")
+
+        response = self.client.patch(
+            f"/api/doctor/reports/{report['id']}",
+            json={"review_status": "reviewed", "doctor_note": "   "},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["report"]["review_status"], "reviewed")
+        self.assertEqual(response.json()["report"]["doctor_note"], "")
+        reports, total = database.list_symptom_reports(
+            FIXED_PATIENT_ID,
+            limit=20,
+            offset=0,
+            include_doctor_notes=True,
+        )
+        self.assertEqual(total, 1)
+        self.assertEqual(reports[0]["doctor_note"], "")
+        self.assertEqual(reports[0]["review_status"], "reviewed")
+
+    def test_doctor_note_at_maximum_length_is_accepted(self):
+        report = database.save_symptom_report(FIXED_PATIENT_ID, ["Headache"])
+        note = "x" * 1000
+        self.login("doctor")
+
+        response = self.client.patch(
+            f"/api/doctor/reports/{report['id']}",
+            json={"review_status": "reviewed", "doctor_note": note},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["report"]["doctor_note"], note)
+        reports, total = database.list_symptom_reports(
+            FIXED_PATIENT_ID,
+            limit=20,
+            offset=0,
+            include_doctor_notes=True,
+        )
+        self.assertEqual(total, 1)
+        self.assertEqual(reports[0]["doctor_note"], note)
