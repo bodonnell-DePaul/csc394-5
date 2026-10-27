@@ -16,7 +16,65 @@ async function requestJson(url, options) {
   return result;
 }
 
+function LoginForm({ onLogin, error }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setLoading(true);
+
+    try {
+      await onLogin(email, password);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="login-page">
+      <form className="login-form" onSubmit={handleSubmit}>
+        <h1>Healthwatch</h1>
+        <p>Sign in to access your patient dashboard.</p>
+
+        <label htmlFor="login-email">Email</label>
+        <input
+          id="login-email"
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          autoComplete="username"
+          required
+        />
+
+        <label htmlFor="login-password">Password</label>
+        <input
+          id="login-password"
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          autoComplete="current-password"
+          required
+        />
+
+        {error && <p role="alert">{error}</p>}
+
+        <button type="submit" disabled={loading}>
+          {loading ? 'Signing in...' : 'Sign In'}
+        </button>
+      </form>
+    </main>
+  );
+}
 function App() {
+
+  // Authentication
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginError, setLoginError] = useState('');
+  
+  
   const [patient, setPatient] = useState(null);
   const [symptoms, setSymptoms] = useState([]);
   const [symptomChoice, setSymptomChoice] = useState('');
@@ -24,6 +82,63 @@ function App() {
   const [reports, setReports] = useState([]);
   const [summary, setSummary] = useState(null);
   const [status, setStatus] = useState(null);
+
+  async function handleLogin(email, password) {
+  setLoginError('');
+
+  try {
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        response.status === 401
+          ? 'Invalid email or password.'
+          : 'Unable to sign in. Please try again.'
+      );
+    }
+
+    const result = await response.json();
+    setUser(result.user);
+  } catch (error) {
+    setLoginError(error.message);
+  }
+}
+async function handleLogout() {
+  try {
+    const response = await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+    });
+
+    if (!response.ok) {
+      throw new Error('Unable to log out. Please try again.');
+    }
+
+    // Clear patient information from React
+    setPatient(null);
+    setReports([]);
+    setSummary(null);
+    setSelectedSymptoms([]);
+    setSymptomChoice('');
+    setStatus(null);
+    setLoginError('');
+
+    // Return to the login screen
+    setUser(null);
+  } catch (error) {
+    setStatus({
+      message: error.message,
+      isError: true,
+    });
+  }
+}
 
   async function refreshHistory() {
     const [reportResult, summaryResult] = await Promise.all([
@@ -35,7 +150,38 @@ function App() {
   }
 
   useEffect(() => {
+  let active = true;
+
+  async function checkSession() {
+    try {
+      const result = await requestJson('/api/auth/me');
+
+      if (active) {
+        setUser(result.user);
+      }
+    } catch (error) {
+      if (active) {
+        setUser(null);
+      }
+    } finally {
+      if (active) {
+        setAuthLoading(false);
+      }
+    }
+  }
+
+  checkSession();
+
+  return () => {
+    active = false;
+  };
+}, []);
+
+  useEffect(() => {
+    if (!user) return;
+
     let active = true;
+    
 
     async function loadDemo() {
       try {
@@ -64,7 +210,7 @@ function App() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [user]);
 
   async function submitReport(event) {
     event.preventDefault();
@@ -98,11 +244,26 @@ function App() {
       setStatus({ message: error.message, isError: true });
     }
   }
+  if (authLoading) {
+    return <main className="login-page">Checking session...</main>;
+}
 
+  if (!user) {
+    return (
+      <LoginForm
+        onLogin={handleLogin}
+        error={loginError}
+      />
+  );
+}
   return (
     <div className="container">
       <header className="hero">
         <h1>Healthwatch Demo</h1>
+
+        <button type="button" onClick={handleLogout}>
+          Log Out
+        </button>
       </header>
 
       <main className="grid">
@@ -233,6 +394,7 @@ function App() {
     </div>
   );
 }
+
 
 function Stat({ label, value }) {
   return (

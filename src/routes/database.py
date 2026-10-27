@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import hashlib
 from contextlib import closing
 from datetime import datetime, timezone
 from typing import Any
@@ -34,6 +35,25 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE symptom_reports ADD COLUMN notes TEXT NOT NULL DEFAULT ''"
             )
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL
+                    CHECK (role IN ('patient', 'doctor')),
+                patient_id TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                token_hash TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                expires_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
         conn.commit()
 
 
@@ -142,3 +162,84 @@ def get_report_summary(patient_id: str) -> dict[str, Any]:
         "total_symptom_entries": len(symptoms),
         "top_symptoms": top_symptoms,
     }
+
+def create_user(
+    email: str,
+    password_hash: str,
+    role: str = "patient",
+    patient_id: str | None = None,
+) -> int:
+    """Save a new user account and return its ID."""
+    if role not in ("patient", "doctor"):
+        raise ValueError("Invalid user role.")
+
+    with closing(get_connection()) as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO users (email, password_hash, role, patient_id)
+            VALUES (?, ?, ?, ?)
+            """,
+            (email.strip().lower(), password_hash, role, patient_id),
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+
+def get_user_by_email(email: str) -> dict[str, Any] | None:
+    """Find an existing user by email."""
+    with closing(get_connection()) as conn:
+        row = conn.execute(
+            """
+            SELECT id, email, password_hash, role, patient_id
+            FROM users
+            WHERE email = ?
+            """,
+            (email.strip().lower(),),
+        ).fetchone()
+
+    return dict(row) if row else None
+def create_session(user_id: int, token: str, expires_at: str) -> None:
+    """Store a hashed session token in SQLite."""
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    with closing(get_connection()) as conn:
+        conn.execute(
+            """
+            INSERT INTO user_sessions (token_hash, user_id, expires_at)
+            VALUES (?, ?, ?)
+            """,
+            (token_hash, user_id, expires_at),
+        )
+        conn.commit()
+
+
+def get_session_user(token: str) -> dict[str, Any] | None:
+    """Return the user associated with a valid, unexpired session."""
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    current_time = datetime.now(timezone.utc).isoformat()
+
+    with closing(get_connection()) as conn:
+        row = conn.execute(
+            """
+            SELECT users.id, users.email, users.role, users.patient_id
+            FROM user_sessions
+            JOIN users ON users.id = user_sessions.user_id
+            WHERE user_sessions.token_hash = ?
+              AND user_sessions.expires_at > ?
+            """,
+            (token_hash, current_time),
+        ).fetchone()
+
+    return dict(row) if row else None
+
+
+def delete_session(token: str) -> None:
+    """Invalidate a session when a user logs out."""
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    with closing(get_connection()) as conn:
+        conn.execute(
+            "DELETE FROM user_sessions WHERE token_hash = ?",
+            (token_hash,),
+        )
+        conn.commit()
