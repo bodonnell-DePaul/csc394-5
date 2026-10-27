@@ -67,12 +67,7 @@ function LoginForm({ onLogin, error }) {
     </main>
   );
 }
-function App() {
-
-  // Authentication
-  const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [loginError, setLoginError] = useState('');
+function PatientDashboard({ user, onLogout }) {
   
   
   const [patient, setPatient] = useState(null);
@@ -83,62 +78,6 @@ function App() {
   const [summary, setSummary] = useState(null);
   const [status, setStatus] = useState(null);
 
-  async function handleLogin(email, password) {
-  setLoginError('');
-
-  try {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'same-origin',
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!response.ok) {
-      throw new Error(
-        response.status === 401
-          ? 'Invalid email or password.'
-          : 'Unable to sign in. Please try again.'
-      );
-    }
-
-    const result = await response.json();
-    setUser(result.user);
-  } catch (error) {
-    setLoginError(error.message);
-  }
-}
-async function handleLogout() {
-  try {
-    const response = await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'same-origin',
-    });
-
-    if (!response.ok) {
-      throw new Error('Unable to log out. Please try again.');
-    }
-
-    // Clear patient information from React
-    setPatient(null);
-    setReports([]);
-    setSummary(null);
-    setSelectedSymptoms([]);
-    setSymptomChoice('');
-    setStatus(null);
-    setLoginError('');
-
-    // Return to the login screen
-    setUser(null);
-  } catch (error) {
-    setStatus({
-      message: error.message,
-      isError: true,
-    });
-  }
-}
 
   async function refreshHistory() {
     const [reportResult, summaryResult] = await Promise.all([
@@ -148,34 +87,6 @@ async function handleLogout() {
     setReports(reportResult.reports);
     setSummary(summaryResult.summary);
   }
-
-  useEffect(() => {
-  let active = true;
-
-  async function checkSession() {
-    try {
-      const result = await requestJson('/api/auth/me');
-
-      if (active) {
-        setUser(result.user);
-      }
-    } catch (error) {
-      if (active) {
-        setUser(null);
-      }
-    } finally {
-      if (active) {
-        setAuthLoading(false);
-      }
-    }
-  }
-
-  checkSession();
-
-  return () => {
-    active = false;
-  };
-}, []);
 
   useEffect(() => {
     if (!user) return;
@@ -244,28 +155,16 @@ async function handleLogout() {
       setStatus({ message: error.message, isError: true });
     }
   }
-  if (authLoading) {
-    return <main className="login-page">Checking session...</main>;
-}
-
-  if (!user) {
-    return (
-      <LoginForm
-        onLogin={handleLogin}
-        error={loginError}
-      />
-  );
-}
+  
   return (
     <div className="container">
       <header className="hero">
         <h1>Healthwatch Demo</h1>
 
-        <button type="button" onClick={handleLogout}>
+        <button type="button" onClick={onLogout}>
           Log Out
         </button>
       </header>
-
       <main className="grid">
         <section className="panel" aria-labelledby="patient-heading">
           <h2 id="patient-heading">Patient profile</h2>
@@ -405,8 +304,209 @@ function Stat({ label, value }) {
   );
 }
 
+
+function DoctorDashboard() {
+  const [dashboard, setDashboard] = useState(null);
+  const [filter, setFilter] = useState('all');
+  const [drafts, setDrafts] = useState({});
+  const [busyId, setBusyId] = useState(null);
+  const [message, setMessage] = useState('');
+
+  async function loadDashboard() {
+    const data = await requestJson('/api/doctor/dashboard?limit=100');
+    setDashboard(data);
+  }
+
+  useEffect(() => {
+    let active = true;
+    requestJson('/api/doctor/dashboard?limit=100')
+      .then((data) => { if (active) setDashboard(data); })
+      .catch((error) => { if (active) setMessage(error.message); });
+    return () => { active = false; };
+  }, []);
+
+  async function saveReview(report, reviewStatus) {
+    setBusyId(report.id);
+    setMessage('');
+    try {
+      await requestJson(`/api/doctor/reports/${report.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          review_status: reviewStatus,
+          doctor_note: drafts[report.id] ?? report.doctor_note ?? '',
+        }),
+      });
+      await loadDashboard();
+      setMessage('Review saved successfully.');
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const displayed = (dashboard?.reports ?? []).filter(
+    (report) => filter === 'all' || report.review_status === filter
+  );
+  return (
+    <main className="doctor-layout">
+      <div className="doctor-heading">
+        <div><h2>Doctor dashboard</h2><p>Demo review workspace for synthetic patient reports.</p></div>
+        <button className="secondary-button" onClick={() => loadDashboard().catch((error) => setMessage(error.message))}>Refresh reports</button>
+      </div>
+      <div className="patient-card dashboard-stats">
+        <Stat label="Total reports" value={dashboard?.page.total ?? '—'} />
+        <Stat label="Pending review" value={dashboard?.review_counts.pending ?? '—'} />
+        <Stat label="Reviewed" value={dashboard?.review_counts.reviewed ?? '—'} />
+        <Stat label="Patient" value={dashboard?.patient.name ?? 'Loading…'} />
+      </div>
+      <section className="panel">
+        <div className="doctor-toolbar">
+          <h2>Patient symptom reports</h2>
+          <label>Show <select value={filter} onChange={(event) => setFilter(event.target.value)}>
+            <option value="all">All reports</option>
+            <option value="pending">Pending</option>
+            <option value="reviewed">Reviewed</option>
+          </select></label>
+        </div>
+        <p className="muted">Doctor notes are visible only in this demo doctor interface, not in the patient history. This view is not access-controlled.</p>
+        <div role="status" aria-live="polite" className="status">{message}</div>
+        {!dashboard && !message && <p>Loading reports…</p>}
+        {dashboard && displayed.length === 0 && <p>No reports match this filter.</p>}
+        {displayed.map((report) => (
+          <article className="history-item doctor-report" key={report.id}>
+            <div className="doctor-report-top">
+              <div><strong>Report #{report.id}</strong><div className="meta">{new Date(report.submitted_at).toLocaleString()}</div></div>
+              <span className={`review-badge ${report.review_status}`}>{report.review_status === 'reviewed' ? 'Reviewed' : 'Pending review'}</span>
+            </div>
+            <div className="pill-list">{report.symptoms.map((symptom) => <span className="pill" key={symptom}>{symptom}</span>)}</div>
+            <p><strong>Patient notes:</strong> {report.notes || 'No additional details'}</p>
+            <label className="field-label" htmlFor={`doctor-note-${report.id}`}>Doctor review notes</label>
+            <textarea id={`doctor-note-${report.id}`} maxLength={1000} rows={3}
+              value={drafts[report.id] ?? report.doctor_note ?? ''}
+              onChange={(event) => setDrafts((old) => ({...old, [report.id]: event.target.value}))}
+              placeholder="Enter review notes (demo only)" />
+            <div className="button-row review-actions">
+              <button disabled={busyId !== null} onClick={() => saveReview(report, 'reviewed')}>Mark reviewed & save</button>
+              <button disabled={busyId !== null} className="secondary-button" onClick={() => saveReview(report, 'pending')}>Save as pending</button>
+            </div>
+          </article>
+        ))}
+        {dashboard && dashboard.page.total > dashboard.reports.length && <p className="muted">Showing the latest {dashboard.reports.length} reports out of {dashboard.page.total}.</p>}
+      </section>
+    </main>
+  );
+}
+
+function HealthwatchApp() {
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginError, setLoginError] = useState('');
+
+  // Check whether the user already has an active session.
+  useEffect(() => {
+    let active = true;
+
+    async function checkSession() {
+      try {
+        const result = await requestJson('/api/auth/me');
+
+        if (active) {
+          setUser(result.user);
+        }
+      } catch (error) {
+        if (active) {
+          setUser(null);
+        }
+      } finally {
+        if (active) {
+          setAuthLoading(false);
+        }
+      }
+    }
+
+    checkSession();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function handleLogin(email, password) {
+    setLoginError('');
+
+    try {
+      const result = await requestJson('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ email, password }),
+      });
+
+      setUser(result.user);
+    } catch (error) {
+      setLoginError(error.message);
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await requestJson('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+
+      setUser(null);
+      setLoginError('');
+    } catch (error) {
+      alert(`Unable to log out: ${error.message}`);
+    }
+  }
+
+  if (authLoading) {
+    return <main className="login-page">Checking session...</main>;
+  }
+
+  if (!user) {
+    return (
+      <LoginForm
+        onLogin={handleLogin}
+        error={loginError}
+      />
+    );
+  }
+
+  if (user.role === 'patient') {
+    return (
+      <PatientDashboard
+        user={user}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  if (user.role === 'doctor') {
+    return (
+      <div className="container">
+        <header className="hero">
+          <h1>Healthwatch Doctor Dashboard</h1>
+          <button type="button" onClick={handleLogout}>
+            Log Out
+          </button>
+        </header>
+        <DoctorDashboard />
+      </div>
+    );
+  }
+
+  return <main className="login-page">Your account role is not supported.</main>;
+}
+
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <HealthwatchApp />
   </React.StrictMode>,
 );

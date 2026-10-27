@@ -158,3 +158,16 @@ def require_patient_user(
         )
 
     return user
+
+def require_doctor_user(
+    user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict[str, Any]:
+    """Allow only authenticated doctor accounts."""
+
+    if user["role"] != "doctor":
+        raise HTTPException(
+            status_code=403,
+            detail="Doctor access required.",
+        )
+
+    return user

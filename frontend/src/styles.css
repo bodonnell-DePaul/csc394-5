@@ -269,3 +269,30 @@ select:focus-visible {
     flex: 1 1 100%;
   }
 }
+
+/* Demo doctor review workspace */
+.hero { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 18px; }
+.view-switcher { display: flex; gap: 8px; flex-wrap: wrap; }
+.view-switcher button { border: 1px solid rgba(255,255,255,.6); background: transparent; }
+.view-switcher button.active, .view-switcher button:hover { background: white; color: var(--primary-dark); }
+.demo-warning { margin: 14px 0 0; padding: 12px 16px; border: 1px solid #e8d5a4; background: #fff8e5; border-radius: 10px; color: #6c5100; }
+.doctor-layout { margin-top: 24px; }
+.doctor-heading, .doctor-toolbar, .doctor-report-top { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.doctor-heading h2 { margin-bottom: 4px; }
+.doctor-heading p, .muted { color: var(--muted); }
+.doctor-heading p { margin-top: 4px; }
+.dashboard-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 20px; }
+.doctor-toolbar { margin-bottom: 12px; }
+.doctor-toolbar h2 { margin-bottom: 0; }
+.doctor-toolbar select { min-height: 40px; margin-left: 8px; border-radius: 8px; padding: 6px; border: 1px solid var(--border); }
+.doctor-report { margin-top: 16px; padding: 20px; }
+.doctor-report textarea { display: block; width: 100%; min-height: 90px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; font: inherit; }
+.doctor-report-top { margin-bottom: 12px; }
+.review-badge { border-radius: 99px; padding: 6px 12px; font-size: .85rem; font-weight: 700; text-transform: capitalize; }
+.review-badge.pending { color: #8a5600; background: #fff3d6; }
+.review-badge.reviewed { color: #136e43; background: #dff6e9; }
+.review-actions { margin-top: 12px; }
+.secondary-button { background: #eaf3ff; color: var(--primary-dark); }
+.secondary-button:hover { background: #d6e7fa; color: var(--primary-dark); }
+button:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 760px) { .dashboard-stats { grid-template-columns: repeat(2,minmax(0,1fr)); } }

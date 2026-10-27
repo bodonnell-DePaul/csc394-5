@@ -97,8 +97,23 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(list_response.status_code, 200)
         list_body = list_response.json()
         self.assertEqual(set(list_body), {"reports", "page"})
-        self.assertEqual(list_body["reports"], [create_body["report"]])
-        self.assertEqual(list_body["page"], {"limit": 1, "offset": 0, "total": 1})
+        self.assertEqual(len(list_body["reports"]), 1)
+
+        listed_report = list_body["reports"][0]
+
+        self.assertEqual(
+            listed_report["review_status"],
+            "pending",
+        )
+        self.assertEqual(
+            {key: value for key, value in listed_report.items()
+             if key != "review_status"},
+            create_body["report"],
+        )
+        self.assertEqual(
+            list_body["page"],
+            {"limit": 1, "offset": 0, "total": 1},
+        )
 
 
     def test_invalid_report_payloads_return_validation_errors(self):

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 from pydantic_core import PydanticCustomError
 
@@ -8,7 +10,12 @@ class SymptomReportRequest(BaseModel):
     patient_id: str = FIXED_PATIENT_ID
     symptoms: list[str]
     notes: str | None = Field(default=None, max_length=1000)
-
+    medication_name: str | None = Field(default=None, min_length=1)
+    dosage_value: float | None = Field(default=None, gt=0)
+    dosage_unit: str | None = Field(
+        default=None,
+        pattern="^(mg|mcg|ml|g|tablets)$",
+    )
     @field_validator("symptoms")
     @classmethod
     def validate_symptoms(cls, value: list[str]) -> list[str]:
@@ -43,3 +50,13 @@ class SymptomReportRequest(BaseModel):
 
         cleaned_notes = value.strip()
         return cleaned_notes or None
+
+
+class DoctorReviewUpdate(BaseModel):
+    review_status: Literal["pending", "reviewed"]
+    doctor_note: str = Field(default="", max_length=1000)
+
+    @field_validator("doctor_note")
+    @classmethod
+    def clean_doctor_note(cls, value: str) -> str:
+        return value.strip()
