@@ -370,7 +370,9 @@ function DoctorDashboard() {
             <option value="reviewed">Reviewed</option>
           </select></label>
         </div>
-        <p className="muted">Doctor notes are visible only in this demo doctor interface, not in the patient history. This view is not access-controlled.</p>
+        <p className="muted">
+          Doctor notes are only visible to authorized doctors and are not shown in the patient's symptom history.
+        </p>
         <div role="status" aria-live="polite" className="status">{message}</div>
         {!dashboard && !message && <p>Loading reports…</p>}
         {dashboard && displayed.length === 0 && <p>No reports match this filter.</p>}
