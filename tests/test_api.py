@@ -54,6 +54,153 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"symptoms": AVAILABLE_SYMPTOMS})
 
+    def test_public_routes_return_expected_responses(self):
+        index_response = self.client.get("/")
+        health_response = self.client.get("/health")
+        auth_status_response = self.client.get("/api/auth/status")
+
+        self.assertEqual(index_response.status_code, 200)
+        self.assertTrue(index_response.headers["content-type"].startswith("text/html"))
+        self.assertIn("<html", index_response.text.lower())
+        self.assertEqual(health_response.status_code, 200)
+        self.assertEqual(health_response.json(), {"status": "ok"})
+        self.assertEqual(auth_status_response.status_code, 200)
+        self.assertEqual(
+            auth_status_response.json(),
+            {"message": "Healthwatch authentication router is working"},
+        )
+
+    def test_auth_login_me_and_logout_lifecycle(self):
+        current_user = self.client.get("/api/auth/me")
+        self.assertEqual(current_user.status_code, 200)
+        self.assertEqual(
+            current_user.json()["user"]["email"],
+            "testpatient@example.com",
+        )
+        self.assertEqual(current_user.json()["user"]["role"], "patient")
+
+        logout = self.client.post("/api/auth/logout")
+        self.assertEqual(
+            logout.json(),
+            {"message": "Logged out successfully."},
+        )
+        self.assertIn("healthwatch_session", logout.headers.get("set-cookie", ""))
+        self.assertEqual(self.client.get("/api/auth/me").status_code, 401)
+
+        invalid_credentials = self.client.post(
+            "/api/auth/login",
+            json={
+                "email": "testpatient@example.com",
+                "password": "WrongPassword123!",
+            },
+        )
+        unknown_user = self.client.post(
+            "/api/auth/login",
+            json={"email": "missing@example.com", "password": "WrongPassword123!"},
+        )
+        self.assertEqual(invalid_credentials.status_code, 401)
+        self.assertEqual(unknown_user.status_code, 401)
+        self.assertEqual(
+            invalid_credentials.json(),
+            {"detail": "Invalid email or password."},
+        )
+        self.assertEqual(self.client.get("/api/auth/me").status_code, 401)
+
+    def test_auth_me_rejects_missing_or_invalid_session(self):
+        self.client.post("/api/auth/logout")
+        self.assertEqual(self.client.get("/api/auth/me").status_code, 401)
+
+        self.client.cookies.set("healthwatch_session", "invalid-session-token")
+        response = self.client.get("/api/auth/me")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(
+            response.json(),
+            {"detail": "Invalid or expired session."},
+        )
+
+    def test_patient_profile_and_summary_routes(self):
+        database.save_symptom_report(
+            FIXED_PATIENT_ID, ["Nausea", "Headache"]
+        )
+        database.save_symptom_report(FIXED_PATIENT_ID, ["Nausea"])
+
+        patient_response = self.client.get("/api/patient")
+        summary_response = self.client.get("/api/symptom_report/summary")
+
+        self.assertEqual(patient_response.status_code, 200)
+        self.assertEqual(patient_response.json()["patient"]["id"], FIXED_PATIENT_ID)
+        self.assertEqual(patient_response.json()["patient"]["name"], "Alex Morgan")
+        self.assertEqual(summary_response.status_code, 200)
+        self.assertEqual(
+            summary_response.json()["summary"],
+            {
+                "patient_id": FIXED_PATIENT_ID,
+                "total_reports": 2,
+                "total_symptom_entries": 3,
+                "top_symptoms": [
+                    {"name": "Nausea", "count": 2},
+                    {"name": "Headache", "count": 1},
+                ],
+            },
+        )
+
+    def test_patient_profile_and_summary_reject_unknown_patient(self):
+        profile = self.client.get("/api/patient", params={"patient_id": "unknown"})
+        summary = self.client.get(
+            "/api/symptom_report/summary",
+            params={"patient_id": "unknown"},
+        )
+
+        self.assertEqual(profile.status_code, 404)
+        self.assertEqual(summary.status_code, 404)
+        self.assertEqual(
+            profile.json(),
+            {"detail": "Patient not found."},
+        )
+        self.assertEqual(
+            summary.json(),
+            {"detail": "Patient not found."},
+        )
+
+    def test_clear_reports_only_deletes_authenticated_patient_history(self):
+        database.save_symptom_report(FIXED_PATIENT_ID, ["Nausea"])
+        database.save_symptom_report(FIXED_PATIENT_ID, ["Headache"])
+        database.save_symptom_report("another-patient", ["Fatigue"])
+
+        response = self.client.delete("/api/symptom_report")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {"message": "Symptom history cleared.", "deleted_rows": 2},
+        )
+        self.assertEqual(database.list_symptom_reports(
+            FIXED_PATIENT_ID, limit=20, offset=0
+        ), ([], 0))
+        self.assertEqual(
+            database.list_symptom_reports(
+                "another-patient", limit=20, offset=0
+            )[1],
+            1,
+        )
+
+    def test_patient_routes_require_authentication(self):
+        self.client.post("/api/auth/logout")
+
+        responses = [
+            self.client.get("/api/patient"),
+            self.client.get("/api/symptom_report/summary"),
+            self.client.get("/api/symptom_report"),
+            self.client.delete("/api/symptom_report"),
+            self.client.post(
+                "/api/symptom_report",
+                json={"symptoms": ["Nausea"]},
+            ),
+        ]
+
+        self.assertEqual([response.status_code for response in responses], [401] * 5)
+
     def test_requests_are_logged_with_method_path_and_status(self):
         with self.assertLogs("uvicorn.error", level=logging.INFO) as captured:
             success_response = self.client.get("/health")
@@ -124,7 +271,6 @@ class ApiIntegrationTests(unittest.TestCase):
                 "Unsupported symptom: Unknown symptom",
             ),
             ({"symptoms": ["Nausea"], "notes": 123}, "Notes must be text."),
-            ({"symptoms": ["Nausea"], "notes": "x" * 1001}, None),
         ]
         for payload, expected_message in invalid_payloads:
             with self.subTest(payload=payload):
@@ -139,6 +285,34 @@ class ApiIntegrationTests(unittest.TestCase):
                     self.client.get("/api/symptom_report").json()["page"]["total"],
                     0,
                 )
+
+    def test_oversized_patient_notes_are_rejected_without_saving_report(self):
+        response = self.client.post(
+            "/api/symptom_report",
+            json={"symptoms": ["Nausea"], "notes": "x" * 1001},
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(set(response.json()), {"detail"})
+        self.assertEqual(
+            self.client.get("/api/symptom_report").json()["page"]["total"],
+            0,
+        )
+
+    def test_patient_notes_at_maximum_length_are_accepted(self):
+        notes = "x" * 1000
+        response = self.client.post(
+            "/api/symptom_report",
+            json={"symptoms": ["Nausea"], "notes": notes},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["report"]["notes"], notes)
+        reports, total = database.list_symptom_reports(
+            FIXED_PATIENT_ID, limit=20, offset=0
+        )
+        self.assertEqual(total, 1)
+        self.assertEqual(reports[0]["notes"], notes)
 
     def test_invalid_pagination_returns_validation_error(self):
         for params in ({"limit": 0}, {"limit": 101}, {"offset": -1}):

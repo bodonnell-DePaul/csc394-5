@@ -1,8 +1,10 @@
+import hashlib
 import logging
 import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -42,7 +44,104 @@ class DatabaseTests(unittest.TestCase):
                 row[1] for row in conn.execute("PRAGMA table_info(symptom_reports)")
             }
 
-        self.assertIn("notes", columns)
+        self.assertTrue({"notes", "review_status", "doctor_note"} <= columns)
+
+    def test_users_are_normalized_and_sessions_expire_and_can_be_deleted(self):
+        user_id = database.create_user(
+            " Patient@Example.com ",
+            "stored-password-hash",
+            patient_id="patient-a",
+        )
+
+        user = database.get_user_by_email("PATIENT@example.com")
+        self.assertEqual(
+            user,
+            {
+                "id": user_id,
+                "email": "patient@example.com",
+                "password_hash": "stored-password-hash",
+                "role": "patient",
+                "patient_id": "patient-a",
+            },
+        )
+        self.assertIsNone(database.get_user_by_email("missing@example.com"))
+
+        token = "session-secret"
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        database.create_session(user_id, token, expires_at)
+
+        with closing(database.get_connection()) as conn:
+            stored_token_hash = conn.execute(
+                "SELECT token_hash FROM user_sessions WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()["token_hash"]
+        self.assertEqual(
+            stored_token_hash,
+            hashlib.sha256(token.encode("utf-8")).hexdigest(),
+        )
+
+        self.assertEqual(
+            database.get_session_user(token),
+            {
+                "id": user_id,
+                "email": "patient@example.com",
+                "role": "patient",
+                "patient_id": "patient-a",
+            },
+        )
+        self.assertIsNone(database.get_session_user("incorrect-token"))
+
+        expired_token = "expired-session"
+        database.create_session(
+            user_id,
+            expired_token,
+            (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat(),
+        )
+        self.assertIsNone(database.get_session_user(expired_token))
+
+        database.delete_session(token)
+        self.assertIsNone(database.get_session_user(token))
+
+    def test_user_role_and_email_constraints(self):
+        with self.assertRaisesRegex(ValueError, "Invalid user role"):
+            database.create_user("invalid@example.com", "hash", role="admin")
+
+        database.create_user("patient@example.com", "hash")
+        with self.assertRaises(sqlite3.IntegrityError):
+            database.create_user("PATIENT@example.com", "another-hash")
+
+    def test_review_updates_and_counts_are_patient_scoped(self):
+        report = database.save_symptom_report("patient-a", ["Nausea"])
+        database.save_symptom_report("patient-b", ["Fatigue"])
+
+        updated = database.update_report_review(
+            report["id"], "patient-a", "reviewed", "Call next week"
+        )
+
+        self.assertEqual(updated["review_status"], "reviewed")
+        self.assertEqual(updated["doctor_note"], "Call next week")
+        self.assertIsNone(
+            database.update_report_review(
+                report["id"], "patient-b", "reviewed", "Wrong patient"
+            )
+        )
+        self.assertEqual(
+            database.get_review_counts("patient-a"),
+            {"pending": 0, "reviewed": 1},
+        )
+        self.assertEqual(
+            database.get_review_counts("patient-b"),
+            {"pending": 1, "reviewed": 0},
+        )
+
+        patient_reports, _ = database.list_symptom_reports(
+            "patient-a", limit=20, offset=0
+        )
+        doctor_reports, _ = database.list_symptom_reports(
+            "patient-a", limit=20, offset=0, include_doctor_notes=True
+        )
+        self.assertNotIn("doctor_note", patient_reports[0])
+        self.assertEqual(doctor_reports[0]["doctor_note"], "Call next week")
 
     def test_reports_are_persisted_and_paginated(self):
         patient_id = "patient-a"
