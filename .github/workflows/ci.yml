@@ -31,7 +31,7 @@ jobs:
    
       - name: Execute Automated Test Suite (Pytest)
         run: |
-          pytest --maxfail=1 --disable-warnings
+          pytest tests --maxfail=1 --disable-warnings
 
 
   frontend-checks:
