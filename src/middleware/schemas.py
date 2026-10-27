@@ -60,3 +60,38 @@ class DoctorReviewUpdate(BaseModel):
     @classmethod
     def clean_doctor_note(cls, value: str) -> str:
         return value.strip()
+<<<<<<< HEAD
+=======
+
+class DosageUpdateRequest(BaseModel):
+    patient_id: str= FIXED_PATIENT_ID
+    medication_name: str = Field(..., min_length=1)
+    dosage_value: float = Field(..., gt=0, description="Dosage must be greater than 0")
+    dosage_unit: str
+
+    @field_validator("medication_name")
+    @classmethod
+    def clean_medication(cls, value:str) ->
+    return value.strip().lower()
+    @model_validator(mode="after")
+    def check_safe_range(self):
+        limits = SAFE_DOSE_RANGES.get(self.medication_name, {}).get(self.dosage_unit)
+        if limits is None:
+            return self  # unknown medication or unit: no range to check
+        low, high = limits
+        if not low <= self.dosage_value <= high:
+            raise ValueError(
+                f"{self.dosage_value} {self.dosage_unit} is outside the safe range "
+                f"for {self.medication_name} ({low}-{high} {self.dosage_unit})."
+            )
+        return self
+
+class MedicationRemoveRequest(BaseModel) :
+    patient_id: str=FIXED_PATIENT_ID
+    medication_name: str=Field(..., min_length=1)  
+
+    @field_validator
+    @class_method
+    def clean_medication(cls, value:str)->
+     return value.strip().lower()
+>>>>>>> jelena-prog-patch-1

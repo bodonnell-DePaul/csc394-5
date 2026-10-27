@@ -337,3 +337,41 @@ def update_report_review(
         "review_status": row["review_status"],
         "doctor_note": row["doctor_note"],
     }
+def update_prescription_dosage(patient_id: str, medication_name: str, dosage_value: float, dosage_unit: str
+) -> dict[str, Any]:
+    updated_at = datetime.now(timezone.utc).isoformat()
+    with closing(get_connection()) as conn:
+        conn.execute(
+            """
+            INSERT INTO prescriptions (patient_id, medication_name, dosage_value, dosage_unit, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(patient_id, medication_name) 
+            DO UPDATE SET 
+                dosage_value = excluded.dosage_value,
+                dosage_unit = excluded.dosage_unit,
+                updated_at = excluded.updated_at
+            """,
+            (patient_id, medication_name.strip().lower(), dosage_value, dosage_unit),
+        )
+        conn.commit()
+    return {
+        "patient_id": patient_id,
+        "medication_name": medication_name.strip().lower(),
+        "dosage_value": dosage_value,
+        "dosage_unit": dosage_unit,
+        "updated_at": updated_at,
+    }
+
+
+
+
+
+
+def remove_prescription(patient_id: str, medication_name: str) -> int:
+    with closing(get_connection()) as conn:
+        cursor = conn.execute(
+            "DELETE FROM prescriptions WHERE patient_id = ? AND medication_name = ?",
+            (patient_id, medication_name)
+        )
+        conn.commit()
+        return cursor.rowcount
