@@ -5,11 +5,13 @@ from ..config import AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID, STATIC_DIR
 from .database import (
     clear_symptom_reports,
     get_patient_profile,
+    get_review_counts,
     get_report_summary,
     list_symptom_reports,
     save_symptom_report,
+    update_report_review,
 )
-from ..middleware.schemas import SymptomReportRequest
+from ..middleware.schemas import DoctorReviewUpdate, SymptomReportRequest
 
 router = APIRouter()
 
@@ -89,3 +91,36 @@ def list_reports(
             "total": total,
         },
     }
+
+
+# Demo-only doctor endpoints. No authentication is implemented; never use real records.
+@router.get("/api/doctor/dashboard")
+def get_doctor_dashboard(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> dict[str, object]:
+    reports, total = list_symptom_reports(
+        FIXED_PATIENT_ID, limit, offset, include_doctor_notes=True
+    )
+    return {
+        "patient": get_patient_profile(FIXED_PATIENT_ID),
+        "summary": get_report_summary(FIXED_PATIENT_ID),
+        "review_counts": get_review_counts(FIXED_PATIENT_ID),
+        "reports": reports,
+        "page": {"limit": limit, "offset": offset, "total": total},
+    }
+
+
+@router.patch("/api/doctor/reports/{report_id}")
+def review_symptom_report(
+    report_id: int, payload: DoctorReviewUpdate
+) -> dict[str, object]:
+    report = update_report_review(
+        report_id, FIXED_PATIENT_ID, payload.review_status, payload.doctor_note
+    )
+    if report is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Symptom report not found.",
+        )
+    return {"message": "Review saved.", "report": report}

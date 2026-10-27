@@ -37,6 +37,14 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE symptom_reports ADD COLUMN notes TEXT NOT NULL DEFAULT ''"
             )
+        if "review_status" not in columns:
+            conn.execute(
+                "ALTER TABLE symptom_reports ADD COLUMN review_status TEXT NOT NULL DEFAULT 'pending'"
+            )
+        if "doctor_note" not in columns:
+            conn.execute(
+                "ALTER TABLE symptom_reports ADD COLUMN doctor_note TEXT NOT NULL DEFAULT ''"
+            )
         conn.commit()
     logger.info("Database operation completed: initialize schema")
 
@@ -70,7 +78,12 @@ def save_symptom_report(
     }
 
 
-def list_symptom_reports(patient_id: str, limit: int, offset: int) -> tuple[list[dict[str, Any]], int]:
+def list_symptom_reports(
+    patient_id: str,
+    limit: int,
+    offset: int,
+    include_doctor_notes: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
     with closing(get_connection()) as conn:
         total_row = conn.execute(
             "SELECT COUNT(*) AS total FROM symptom_reports WHERE patient_id = ?",
@@ -78,7 +91,7 @@ def list_symptom_reports(patient_id: str, limit: int, offset: int) -> tuple[list
         ).fetchone()
         rows = conn.execute(
             """
-            SELECT id, patient_id, submitted_at, symptoms_json, notes
+            SELECT id, patient_id, submitted_at, symptoms_json, notes, review_status, doctor_note
             FROM symptom_reports
             WHERE patient_id = ?
             ORDER BY id DESC
@@ -94,6 +107,8 @@ def list_symptom_reports(patient_id: str, limit: int, offset: int) -> tuple[list
             "submitted_at": row["submitted_at"],
             "symptoms": json.loads(row["symptoms_json"]),
             "notes": row["notes"],
+            "review_status": row["review_status"],
+            **({"doctor_note": row["doctor_note"]} if include_doctor_notes else {}),
         }
         for row in rows
     ]
@@ -154,4 +169,60 @@ def get_report_summary(patient_id: str) -> dict[str, Any]:
         "total_reports": total,
         "total_symptom_entries": len(symptoms),
         "top_symptoms": top_symptoms,
+    }
+
+
+def get_review_counts(patient_id: str) -> dict[str, int]:
+    with closing(get_connection()) as conn:
+        rows = conn.execute(
+            """
+            SELECT review_status, COUNT(*) AS count
+            FROM symptom_reports
+            WHERE patient_id = ?
+            GROUP BY review_status
+            """,
+            (patient_id,),
+        ).fetchall()
+    counts = {"pending": 0, "reviewed": 0}
+    for row in rows:
+        if row["review_status"] in counts:
+            counts[row["review_status"]] = row["count"]
+    return counts
+
+
+def update_report_review(
+    report_id: int,
+    patient_id: str,
+    review_status: str,
+    doctor_note: str,
+) -> dict[str, Any] | None:
+    with closing(get_connection()) as conn:
+        cursor = conn.execute(
+            """
+            UPDATE symptom_reports
+            SET review_status = ?, doctor_note = ?
+            WHERE id = ? AND patient_id = ?
+            """,
+            (review_status, doctor_note, report_id, patient_id),
+        )
+        if cursor.rowcount == 0:
+            return None
+        row = conn.execute(
+            """
+            SELECT id, patient_id, submitted_at, symptoms_json, notes,
+                   review_status, doctor_note
+            FROM symptom_reports WHERE id = ? AND patient_id = ?
+            """,
+            (report_id, patient_id),
+        ).fetchone()
+        conn.commit()
+
+    return {
+        "id": row["id"],
+        "patient_id": row["patient_id"],
+        "submitted_at": row["submitted_at"],
+        "symptoms": json.loads(row["symptoms_json"]),
+        "notes": row["notes"],
+        "review_status": row["review_status"],
+        "doctor_note": row["doctor_note"],
     }

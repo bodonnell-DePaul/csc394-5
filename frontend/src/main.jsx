@@ -100,11 +100,7 @@ function App() {
   }
 
   return (
-    <div className="container">
-      <header className="hero">
-        <h1>Healthwatch Demo</h1>
-      </header>
-
+    <div>
       <main className="grid">
         <section className="panel" aria-labelledby="patient-heading">
           <h2 id="patient-heading">Patient profile</h2>
@@ -243,8 +239,120 @@ function Stat({ label, value }) {
   );
 }
 
+
+function DoctorDashboard() {
+  const [dashboard, setDashboard] = useState(null);
+  const [filter, setFilter] = useState('all');
+  const [drafts, setDrafts] = useState({});
+  const [busyId, setBusyId] = useState(null);
+  const [message, setMessage] = useState('');
+
+  async function loadDashboard() {
+    const data = await requestJson('/api/doctor/dashboard?limit=100');
+    setDashboard(data);
+  }
+
+  useEffect(() => {
+    let active = true;
+    requestJson('/api/doctor/dashboard?limit=100')
+      .then((data) => { if (active) setDashboard(data); })
+      .catch((error) => { if (active) setMessage(error.message); });
+    return () => { active = false; };
+  }, []);
+
+  async function saveReview(report, reviewStatus) {
+    setBusyId(report.id);
+    setMessage('');
+    try {
+      await requestJson(`/api/doctor/reports/${report.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          review_status: reviewStatus,
+          doctor_note: drafts[report.id] ?? report.doctor_note ?? '',
+        }),
+      });
+      await loadDashboard();
+      setMessage('Review saved successfully.');
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const displayed = (dashboard?.reports ?? []).filter(
+    (report) => filter === 'all' || report.review_status === filter
+  );
+  return (
+    <main className="doctor-layout">
+      <div className="doctor-heading">
+        <div><h2>Doctor dashboard</h2><p>Demo review workspace for synthetic patient reports.</p></div>
+        <button className="secondary-button" onClick={() => loadDashboard().catch((error) => setMessage(error.message))}>Refresh reports</button>
+      </div>
+      <div className="patient-card dashboard-stats">
+        <Stat label="Total reports" value={dashboard?.page.total ?? '—'} />
+        <Stat label="Pending review" value={dashboard?.review_counts.pending ?? '—'} />
+        <Stat label="Reviewed" value={dashboard?.review_counts.reviewed ?? '—'} />
+        <Stat label="Patient" value={dashboard?.patient.name ?? 'Loading…'} />
+      </div>
+      <section className="panel">
+        <div className="doctor-toolbar">
+          <h2>Patient symptom reports</h2>
+          <label>Show <select value={filter} onChange={(event) => setFilter(event.target.value)}>
+            <option value="all">All reports</option>
+            <option value="pending">Pending</option>
+            <option value="reviewed">Reviewed</option>
+          </select></label>
+        </div>
+        <p className="muted">Doctor notes are visible only in this demo doctor interface, not in the patient history. This view is not access-controlled.</p>
+        <div role="status" aria-live="polite" className="status">{message}</div>
+        {!dashboard && !message && <p>Loading reports…</p>}
+        {dashboard && displayed.length === 0 && <p>No reports match this filter.</p>}
+        {displayed.map((report) => (
+          <article className="history-item doctor-report" key={report.id}>
+            <div className="doctor-report-top">
+              <div><strong>Report #{report.id}</strong><div className="meta">{new Date(report.submitted_at).toLocaleString()}</div></div>
+              <span className={`review-badge ${report.review_status}`}>{report.review_status === 'reviewed' ? 'Reviewed' : 'Pending review'}</span>
+            </div>
+            <div className="pill-list">{report.symptoms.map((symptom) => <span className="pill" key={symptom}>{symptom}</span>)}</div>
+            <p><strong>Patient notes:</strong> {report.notes || 'No additional details'}</p>
+            <label className="field-label" htmlFor={`doctor-note-${report.id}`}>Doctor review notes</label>
+            <textarea id={`doctor-note-${report.id}`} maxLength={1000} rows={3}
+              value={drafts[report.id] ?? report.doctor_note ?? ''}
+              onChange={(event) => setDrafts((old) => ({...old, [report.id]: event.target.value}))}
+              placeholder="Enter review notes (demo only)" />
+            <div className="button-row review-actions">
+              <button disabled={busyId !== null} onClick={() => saveReview(report, 'reviewed')}>Mark reviewed & save</button>
+              <button disabled={busyId !== null} className="secondary-button" onClick={() => saveReview(report, 'pending')}>Save as pending</button>
+            </div>
+          </article>
+        ))}
+        {dashboard && dashboard.page.total > dashboard.reports.length && <p className="muted">Showing the latest {dashboard.reports.length} reports out of {dashboard.page.total}.</p>}
+      </section>
+    </main>
+  );
+}
+
+function HealthwatchApp() {
+  const [view, setView] = useState('patient');
+  return (
+    <div className="container">
+      <header className="hero">
+        <div><h1>Healthwatch Demo</h1><p>Patient symptom monitoring and report review</p></div>
+        <nav aria-label="Demo views" className="view-switcher">
+          <button type="button" className={view === 'patient' ? 'active' : ''} onClick={() => setView('patient')}>Patient view</button>
+          <button type="button" className={view === 'doctor' ? 'active' : ''} onClick={() => setView('doctor')}>Doctor view</button>
+        </nav>
+      </header>
+      <p className="demo-warning"><strong>Demo only:</strong> Anyone can switch roles. There is no authentication or authorization; use synthetic data only.</p>
+      {view === 'patient' ? <App /> : <DoctorDashboard />}
+    </div>
+  );
+}
+
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <HealthwatchApp />
   </React.StrictMode>,
 );

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 from pydantic_core import PydanticCustomError
 
@@ -46,3 +48,13 @@ class SymptomReportRequest(BaseModel):
 
         cleaned_notes = value.strip()
         return cleaned_notes or None
+
+
+class DoctorReviewUpdate(BaseModel):
+    review_status: Literal["pending", "reviewed"]
+    doctor_note: str = Field(default="", max_length=1000)
+
+    @field_validator("doctor_note")
+    @classmethod
+    def clean_doctor_note(cls, value: str) -> str:
+        return value.strip()

@@ -48,17 +48,11 @@ Project structure
 
 The demo intentionally uses synthetic data only and is not suitable for real patient information or clinical use.
 
-## Tests
+## MCP
+In order to allow doctors to make instantaneous changes such as changing prescription dosages or create appointments for patients, an AI assistant will orchestrate multiple MCP tools to run these processes seamlessly:
+1. code_grep_search: Examine all medications in the database whose status declares they must be modified.
+2. file_write_contents: Generates new React components for the doctor dashboard patient logging screen; implements push notifications in relation to database changes.
+3. sql_execute_query: Ensures that patient's logged symptoms were saved, or to ensure the database the recorded the patients and their corresponding medications that are being updated/are updated.
+4. run_terminal_command: runs integration tests to ensure that notifications are triggered once doctors make alterations.
+5. 
 
-Install the development dependencies and run the API unit and integration tests:
-
-```sh
-python -m pip install -r requirements-dev.txt
-python -m unittest discover --start-directory tests --verbose
-```
-
-Run Python linting and type checking with `python -m ruff check src tests` and
-`python -m mypy src tests`. Lint and build the client with `npm ci`,
-`npm run lint`, and `npm run build`. GitHub Actions runs the Python tests, lint,
-and type checks, plus the client lint and build, on pushes, pull requests, and
-manual runs.
