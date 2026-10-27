@@ -1,6 +1,6 @@
 # Healthwatch symptom-reporting demo
 
-This vertical slice demonstrates one patient feature: select symptoms, submit a report, and see the saved report in the patient's history. It uses a fixed synthetic patient and stores reports in SQLite. It does not include authentication, doctor views, diagnosis, or treatment recommendations.
+This demo provides a patient portal for submitting symptom reports and viewing saved history, along with a clinician dashboard for reviewing reports. It stores account and report data in SQLite; the patient screen displays the signed-in account email and does not invent demographics or care-team details. It does not provide diagnosis or treatment recommendations.
 
 ## API
 
@@ -26,6 +26,42 @@ Demo setup
    python -m src.server.main
 4. Open http://127.0.0.1:8000 in a browser.
 
+### Demo sign-in accounts
+
+The server creates these accounts at startup if they do not already exist:
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Patient | `patient@example.com` | `PatientPassword123!` |
+| Doctor | `doctor@example.com` | `DoctorPassword123!` |
+
+Passwords are stored as Argon2 hashes. Existing accounts with these email addresses are left unchanged. These fixed credentials are for local demonstration only; do not use them in a deployed environment or with real patient information.
+
+### Server-side demo data tools
+
+The FastAPI server and SQLite database can be inspected and maintained from the project root using `python -m src.manage_demo_data`. The commands use `HEALTHWATCH_DB_PATH` when set; otherwise, they target `src/data/healthwatch.db`.
+
+```powershell
+python -m src.manage_demo_data status
+python -m src.manage_demo_data migrate
+python -m src.manage_demo_data seed
+python -m src.manage_demo_data clean
+python -m src.manage_demo_data reset
+```
+
+- `status` prints the database path, initialization state, and user, report, and session counts.
+- `migrate` safely initializes or upgrades the SQLite schema. The server also runs these idempotent migrations at startup.
+- `seed` creates the demo patient and doctor accounts if missing. It does not insert fake symptom reports.
+- `clean` removes expired login sessions; it does not delete reports or user accounts.
+- `reset` asks you to type `RESET`, then deletes all symptom reports and login sessions while preserving user accounts. Stop the server first to avoid concurrent database activity. This reset is permanent.
+
+To point commands at a separate local database in PowerShell, set the path for the current terminal before running them:
+
+```powershell
+$env:HEALTHWATCH_DB_PATH = "C:\path\to\healthwatch-demo.db"
+python -m src.manage_demo_data status
+```
+
 For client development with hot reload, start the API with
 `python -m src.server.main` and, in a second terminal, run `npm run dev`.
 Vite serves the client and proxies `/api` requests to the FastAPI server.
@@ -33,7 +69,7 @@ Vite serves the client and proxies `/api` requests to the FastAPI server.
 Project structure
 - src/server/main.py: FastAPI app factory, startup wiring, and development server entry point
 - src/server/error_handlers.py: database exception logging and HTTP 500 responses
-- src/config.py: shared app constants and synthetic patient profile
+- src/config.py: shared app constants
 - src/server/database.py: SQLite access and report persistence
 - src/routes/routes.py: endpoint definitions
 - src/middleware/schemas.py: request validation models
@@ -55,4 +91,3 @@ In order to allow doctors to make instantaneous changes such as changing prescri
 3. sql_execute_query: Ensures that patient's logged symptoms were saved, or to ensure the database the recorded the patients and their corresponding medications that are being updated/are updated.
 4. run_terminal_command: runs integration tests to ensure that notifications are triggered once doctors make alterations.
 5. 
-

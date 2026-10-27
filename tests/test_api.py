@@ -129,8 +129,16 @@ class ApiIntegrationTests(unittest.TestCase):
         summary_response = self.client.get("/api/symptom_report/summary")
 
         self.assertEqual(patient_response.status_code, 200)
+        self.assertEqual(
+            set(patient_response.json()["patient"]),
+            {"id", "email"},
+        )
         self.assertEqual(patient_response.json()["patient"]["id"], FIXED_PATIENT_ID)
-        self.assertEqual(patient_response.json()["patient"]["name"], "Alex Morgan")
+        self.assertEqual(
+            patient_response.json()["patient"]["email"],
+            "testpatient@example.com",
+        )
+        self.assertNotIn("name", patient_response.json()["patient"])
         self.assertEqual(summary_response.status_code, 200)
         self.assertEqual(
             summary_response.json()["summary"],

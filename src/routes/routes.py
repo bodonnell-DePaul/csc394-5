@@ -38,10 +38,15 @@ def health() -> dict[str, str]:
 @router.get("/api/patient")
 def get_patient(
     patient_id: str = FIXED_PATIENT_ID,
-    _user: dict = Depends(require_patient_user),
+    user: dict = Depends(require_patient_user),
 ) -> dict[str, object]:
     require_demo_patient(patient_id)
-    return {"patient": get_patient_profile(patient_id)}
+    return {
+        "patient": {
+            "id": user["patient_id"],
+            "email": user["email"],
+        }
+    }
 
 
 @router.get("/api/symptoms")
@@ -144,8 +149,14 @@ def get_doctor_dashboard(
     reports, total = list_symptom_reports(
         FIXED_PATIENT_ID, limit, offset, include_doctor_notes=True
     )
+    patient = get_patient_profile(FIXED_PATIENT_ID)
+    if patient is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Patient account not found.",
+        )
     return {
-        "patient": get_patient_profile(FIXED_PATIENT_ID),
+        "patient": patient,
         "summary": get_report_summary(FIXED_PATIENT_ID),
         "review_counts": get_review_counts(FIXED_PATIENT_ID),
         "reports": reports,

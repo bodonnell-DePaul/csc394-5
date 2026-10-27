@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from src.config import FIXED_PATIENT_ID
 from src.routes import database
-from src.routes.auth import password_hasher
+from src.routes.auth import seed_demo_accounts
 from src.server.main import create_app
 
 
@@ -27,19 +27,6 @@ class DoctorDashboardTests(unittest.TestCase):
         self.client.__enter__()
         self.addCleanup(self.client.__exit__, None, None, None)
 
-        database.create_user(
-            email="patient@example.com",
-            password_hash=password_hasher.hash("PatientPassword123!"),
-            role="patient",
-            patient_id=FIXED_PATIENT_ID,
-        )
-
-        database.create_user(
-            email="doctor@example.com",
-            password_hash=password_hasher.hash("DoctorPassword123!"),
-            role="doctor",
-        )
-
     def login(self, role):
         credentials = {
             "patient": ("patient@example.com", "PatientPassword123!"),
@@ -52,6 +39,29 @@ class DoctorDashboardTests(unittest.TestCase):
             json={"email": email, "password": password},
         )
         self.assertEqual(response.status_code, 200)
+
+    def test_demo_accounts_are_seeded_and_seeding_is_idempotent(self):
+        patient = database.get_user_by_email("patient@example.com")
+        doctor = database.get_user_by_email("doctor@example.com")
+
+        self.assertIsNotNone(patient)
+        self.assertEqual(patient["role"], "patient")
+        self.assertIsNotNone(doctor)
+        self.assertEqual(doctor["role"], "doctor")
+
+        seed_demo_accounts()
+
+        self.assertEqual(
+            database.get_user_by_email("patient@example.com")["id"],
+            patient["id"],
+        )
+        self.assertEqual(
+            database.get_user_by_email("doctor@example.com")["id"],
+            doctor["id"],
+        )
+        self.login("patient")
+        self.client.post("/api/auth/logout")
+        self.login("doctor")
 
     def test_doctor_can_review_and_save_notes(self):
         self.login("patient")
@@ -150,6 +160,7 @@ class DoctorDashboardTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
+        self.assertEqual(set(body["patient"]), {"id", "email"})
         self.assertEqual(body["patient"]["id"], FIXED_PATIENT_ID)
         self.assertEqual(body["summary"]["total_reports"], 3)
         self.assertEqual(body["review_counts"], {"pending": 2, "reviewed": 1})
