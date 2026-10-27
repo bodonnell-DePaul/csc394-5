@@ -1,8 +1,19 @@
 src/data/healthwatch.sqlite3
 src/data/healthwatch.sqlite3-shm
 src/data/healthwatch.sqlite3-wal
+
 __pycache__/
 node_modules/
 *.py[cod]
-node_modules/
+
+# Local Python environment
 .venv/
+
+# Local SQLite database files
+src/data/healthwatch.db
+src/data/healthwatch.db-shm
+src/data/healthwatch.db-wal
+
+src/data/healthwatch.local.db
+src/data/healthwatch.local.db-shm
+src/data/healthwatch.local.db-wal

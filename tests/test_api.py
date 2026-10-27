@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from src.config import AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID
 from src.routes import database
+from src.routes.auth import password_hasher
 from src.routes import routes
 from src.server.main import create_app
 
@@ -29,6 +30,24 @@ class ApiIntegrationTests(unittest.TestCase):
         self.client.__enter__()
         self.addCleanup(self.client.__exit__, None, None, None)
 
+        database.create_user(
+        email="testpatient@example.com",
+        password_hash=password_hasher.hash("TestPassword123!"),
+        role="patient",
+        patient_id=FIXED_PATIENT_ID,
+    )
+
+        login_response = self.client.post(
+            "/api/auth/login",
+            json={
+                "email": "testpatient@example.com",
+                "password": "TestPassword123!",
+            },
+        )
+
+        self.assertEqual(login_response.status_code, 200)
+
+
     def test_symptoms_endpoint_returns_supported_choices(self):
         response = self.client.get("/api/symptoms")
 
@@ -44,10 +63,10 @@ class ApiIntegrationTests(unittest.TestCase):
             )
 
         self.assertEqual(success_response.status_code, 200)
-        self.assertEqual(error_response.status_code, 404)
+        self.assertEqual(error_response.status_code, 403)
         output = "\n".join(captured.output)
         self.assertIn("GET /health completed with status 200", output)
-        self.assertIn("GET /api/symptom_report completed with status 404", output)
+        self.assertIn("GET /api/symptom_report completed with status 403", output)
 
     def test_create_then_list_report_preserves_json_data_and_page_schema(self):
         create_response = self.client.post(
@@ -78,9 +97,24 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(list_response.status_code, 200)
         list_body = list_response.json()
         self.assertEqual(set(list_body), {"reports", "page"})
-        self.assertEqual(list_body["reports"], [create_body["report"]])
-        self.assertEqual(list_body["page"], {"limit": 1, "offset": 0, "total": 1})
-        
+        self.assertEqual(len(list_body["reports"]), 1)
+
+        listed_report = list_body["reports"][0]
+
+        self.assertEqual(
+            listed_report["review_status"],
+            "pending",
+        )
+        self.assertEqual(
+            {key: value for key, value in listed_report.items()
+             if key != "review_status"},
+            create_body["report"],
+        )
+        self.assertEqual(
+            list_body["page"],
+            {"limit": 1, "offset": 0, "total": 1},
+        )
+
 
     def test_invalid_report_payloads_return_validation_errors(self):
         invalid_payloads = [
@@ -120,8 +154,11 @@ class ApiIntegrationTests(unittest.TestCase):
             params={"patient_id": "unknown"},
         )
 
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json(), {"detail": "Patient not found."})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.json(),
+            {"detail": "Cannot access another patient's reports."},
+)
 
     def test_database_failure_returns_safe_error_and_logs_details(self):
         def fail_to_save(*args, **kwargs):

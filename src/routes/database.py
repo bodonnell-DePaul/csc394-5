@@ -1,6 +1,7 @@
 import json
 import logging
 import sqlite3
+import hashlib
 from contextlib import closing
 from datetime import datetime, timezone
 from typing import Any
@@ -37,6 +38,34 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE symptom_reports ADD COLUMN notes TEXT NOT NULL DEFAULT ''"
             )
+        if "review_status" not in columns:
+            conn.execute(
+                "ALTER TABLE symptom_reports ADD COLUMN review_status TEXT NOT NULL DEFAULT 'pending'"
+            )
+        if "doctor_note" not in columns:
+            conn.execute(
+                "ALTER TABLE symptom_reports ADD COLUMN doctor_note TEXT NOT NULL DEFAULT ''"
+            )
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL
+                    CHECK (role IN ('patient', 'doctor')),
+                patient_id TEXT
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                token_hash TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                expires_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
         conn.commit()
     logger.info("Database operation completed: initialize schema")
 
@@ -70,7 +99,12 @@ def save_symptom_report(
     }
 
 
-def list_symptom_reports(patient_id: str, limit: int, offset: int) -> tuple[list[dict[str, Any]], int]:
+def list_symptom_reports(
+    patient_id: str,
+    limit: int,
+    offset: int,
+    include_doctor_notes: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
     with closing(get_connection()) as conn:
         total_row = conn.execute(
             "SELECT COUNT(*) AS total FROM symptom_reports WHERE patient_id = ?",
@@ -78,7 +112,7 @@ def list_symptom_reports(patient_id: str, limit: int, offset: int) -> tuple[list
         ).fetchone()
         rows = conn.execute(
             """
-            SELECT id, patient_id, submitted_at, symptoms_json, notes
+            SELECT id, patient_id, submitted_at, symptoms_json, notes, review_status, doctor_note
             FROM symptom_reports
             WHERE patient_id = ?
             ORDER BY id DESC
@@ -94,6 +128,8 @@ def list_symptom_reports(patient_id: str, limit: int, offset: int) -> tuple[list
             "submitted_at": row["submitted_at"],
             "symptoms": json.loads(row["symptoms_json"]),
             "notes": row["notes"],
+            "review_status": row["review_status"],
+            **({"doctor_note": row["doctor_note"]} if include_doctor_notes else {}),
         }
         for row in rows
     ]
@@ -154,4 +190,140 @@ def get_report_summary(patient_id: str) -> dict[str, Any]:
         "total_reports": total,
         "total_symptom_entries": len(symptoms),
         "top_symptoms": top_symptoms,
+    }
+
+def create_user(
+    email: str,
+    password_hash: str,
+    role: str = "patient",
+    patient_id: str | None = None,
+) -> int:
+    """Save a new user account and return its ID."""
+    if role not in ("patient", "doctor"):
+        raise ValueError("Invalid user role.")
+
+    with closing(get_connection()) as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO users (email, password_hash, role, patient_id)
+            VALUES (?, ?, ?, ?)
+            """,
+            (email.strip().lower(), password_hash, role, patient_id),
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+
+def get_user_by_email(email: str) -> dict[str, Any] | None:
+    """Find an existing user by email."""
+    with closing(get_connection()) as conn:
+        row = conn.execute(
+            """
+            SELECT id, email, password_hash, role, patient_id
+            FROM users
+            WHERE email = ?
+            """,
+            (email.strip().lower(),),
+        ).fetchone()
+
+    return dict(row) if row else None
+def create_session(user_id: int, token: str, expires_at: str) -> None:
+    """Store a hashed session token in SQLite."""
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    with closing(get_connection()) as conn:
+        conn.execute(
+            """
+            INSERT INTO user_sessions (token_hash, user_id, expires_at)
+            VALUES (?, ?, ?)
+            """,
+            (token_hash, user_id, expires_at),
+        )
+        conn.commit()
+
+
+def get_session_user(token: str) -> dict[str, Any] | None:
+    """Return the user associated with a valid, unexpired session."""
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    current_time = datetime.now(timezone.utc).isoformat()
+
+    with closing(get_connection()) as conn:
+        row = conn.execute(
+            """
+            SELECT users.id, users.email, users.role, users.patient_id
+            FROM user_sessions
+            JOIN users ON users.id = user_sessions.user_id
+            WHERE user_sessions.token_hash = ?
+              AND user_sessions.expires_at > ?
+            """,
+            (token_hash, current_time),
+        ).fetchone()
+
+    return dict(row) if row else None
+
+
+def delete_session(token: str) -> None:
+    """Invalidate a session when a user logs out."""
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    with closing(get_connection()) as conn:
+        conn.execute(
+            "DELETE FROM user_sessions WHERE token_hash = ?",
+            (token_hash,),
+        )
+        conn.commit()
+
+def get_review_counts(patient_id: str) -> dict[str, int]:
+    with closing(get_connection()) as conn:
+        rows = conn.execute(
+            """
+            SELECT review_status, COUNT(*) AS count
+            FROM symptom_reports
+            WHERE patient_id = ?
+            GROUP BY review_status
+            """,
+            (patient_id,),
+        ).fetchall()
+    counts = {"pending": 0, "reviewed": 0}
+    for row in rows:
+        if row["review_status"] in counts:
+            counts[row["review_status"]] = row["count"]
+    return counts
+
+
+def update_report_review(
+    report_id: int,
+    patient_id: str,
+    review_status: str,
+    doctor_note: str,
+) -> dict[str, Any] | None:
+    with closing(get_connection()) as conn:
+        cursor = conn.execute(
+            """
+            UPDATE symptom_reports
+            SET review_status = ?, doctor_note = ?
+            WHERE id = ? AND patient_id = ?
+            """,
+            (review_status, doctor_note, report_id, patient_id),
+        )
+        if cursor.rowcount == 0:
+            return None
+        row = conn.execute(
+            """
+            SELECT id, patient_id, submitted_at, symptoms_json, notes,
+                   review_status, doctor_note
+            FROM symptom_reports WHERE id = ? AND patient_id = ?
+            """,
+            (report_id, patient_id),
+        ).fetchone()
+        conn.commit()
+
+    return {
+        "id": row["id"],
+        "patient_id": row["patient_id"],
+        "submitted_at": row["submitted_at"],
+        "symptoms": json.loads(row["symptoms_json"]),
+        "notes": row["notes"],
+        "review_status": row["review_status"],
+        "doctor_note": row["doctor_note"],
     }

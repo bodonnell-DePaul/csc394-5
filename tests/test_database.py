@@ -59,8 +59,20 @@ class DatabaseTests(unittest.TestCase):
 
         self.assertEqual(total, 2)
         self.assertEqual(next_total, 2)
-        self.assertEqual(reports, [second])
-        self.assertEqual(next_reports, [first])
+        self.assertEqual(len(reports), 1)
+        self.assertEqual(len(next_reports), 1)
+
+        self.assertEqual(reports[0]["review_status"], "pending")
+        self.assertEqual(next_reports[0]["review_status"], "pending")
+
+        self.assertEqual(
+            {k: v for k, v in reports[0].items() if k != "review_status"},
+            second,
+        )
+        self.assertEqual(
+            {k: v for k, v in next_reports[0].items() if k != "review_status"},
+            first,
+        )
         self.assertEqual(reports[0]["notes"], "Follow up")
         self.assertEqual(reports[0]["symptoms"], ["Headache"])
 
