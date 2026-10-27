@@ -6,7 +6,7 @@ from contextlib import closing
 from datetime import datetime, timezone
 from typing import Any
 
-from ..config import DB_PATH, PATIENT_PROFILE
+from ..config import DB_PATH
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -154,10 +154,20 @@ def clear_symptom_reports(patient_id: str | None = None) -> int:
     return deleted_rows
 
 
-def get_patient_profile(patient_id: str) -> dict[str, Any]:
-    profile = dict(PATIENT_PROFILE)
-    profile["id"] = patient_id
-    return profile
+def get_patient_profile(patient_id: str) -> dict[str, Any] | None:
+    with closing(get_connection()) as conn:
+        row = conn.execute(
+            """
+            SELECT patient_id AS id, email
+            FROM users
+            WHERE patient_id = ? AND role = 'patient'
+            ORDER BY id
+            LIMIT 1
+            """,
+            (patient_id,),
+        ).fetchone()
+
+    return dict(row) if row else None
 
 
 def get_report_summary(patient_id: str) -> dict[str, Any]:
