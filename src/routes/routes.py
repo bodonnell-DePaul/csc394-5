@@ -4,15 +4,22 @@ from .auth import require_patient_user, require_doctor_user
 
 from ..config import AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID, STATIC_DIR
 from .database import (
-    clear_symptom_reports,
+    create_patient_medication,
     get_patient_profile,
     get_review_counts,
     get_report_summary,
+    list_patient_medications,
     list_symptom_reports,
     save_symptom_report,
+    update_patient_medication,
     update_report_review,
 )
-from ..middleware.schemas import DoctorReviewUpdate, SymptomReportRequest
+from ..middleware.schemas import (
+    DoctorReviewUpdate,
+    MedicationRequest,
+    MedicationUpdate,
+    SymptomReportRequest,
+)
 
 router = APIRouter()
 
@@ -49,6 +56,13 @@ def get_symptoms() -> dict[str, list[str]]:
     return {"symptoms": AVAILABLE_SYMPTOMS}
 
 
+@router.get("/api/medications")
+def get_medications(
+    user: dict = Depends(require_patient_user),
+) -> dict[str, list[dict[str, object]]]:
+    return {"medications": list_patient_medications(user["patient_id"])}
+
+
 @router.get("/api/symptom_report/summary")
 def get_summary(
     patient_id: str = FIXED_PATIENT_ID,
@@ -80,28 +94,6 @@ def create_symptom_report(
     return {
         "message": "Symptom report saved.",
         "report": report,
-    }
-
-
-@router.delete("/api/symptom_report")
-def clear_reports(
-    patient_id: str = Query(default=FIXED_PATIENT_ID),
-    user: dict = Depends(require_patient_user),
-) -> dict[str, object]:
-
-    if patient_id != user["patient_id"]:
-        raise HTTPException(
-            status_code=403,
-            detail="Cannot delete another patient's reports.",
-        )
-
-    require_demo_patient(patient_id)
-
-    deleted_rows = clear_symptom_reports(user["patient_id"])
-
-    return {
-        "message": "Symptom history cleared.",
-        "deleted_rows": deleted_rows,
     }
 
 
@@ -146,11 +138,52 @@ def get_doctor_dashboard(
     )
     return {
         "patient": get_patient_profile(FIXED_PATIENT_ID),
+        "medications": list_patient_medications(FIXED_PATIENT_ID),
         "summary": get_report_summary(FIXED_PATIENT_ID),
         "review_counts": get_review_counts(FIXED_PATIENT_ID),
         "reports": reports,
         "page": {"limit": limit, "offset": offset, "total": total},
     }
+
+
+@router.post("/api/doctor/medications", status_code=status.HTTP_201_CREATED)
+def add_patient_medication(
+    payload: MedicationRequest,
+    _user: dict = Depends(require_doctor_user),
+) -> dict[str, object]:
+    medication = create_patient_medication(
+        FIXED_PATIENT_ID,
+        payload.name,
+        payload.dosage_value,
+        payload.dosage_unit,
+        payload.frequency,
+        payload.instructions,
+        payload.active,
+    )
+    return {"message": "Medication added.", "medication": medication}
+
+
+@router.patch("/api/doctor/medications/{medication_id}")
+def change_patient_medication(
+    medication_id: int,
+    payload: MedicationUpdate,
+    _user: dict = Depends(require_doctor_user),
+) -> dict[str, object]:
+    medication = update_patient_medication(
+        medication_id,
+        FIXED_PATIENT_ID,
+        payload.dosage_value,
+        payload.dosage_unit,
+        payload.frequency,
+        payload.instructions,
+        payload.active,
+    )
+    if medication is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Medication not found.",
+        )
+    return {"message": "Medication updated.", "medication": medication}
 
 
 @router.patch("/api/doctor/reports/{report_id}")

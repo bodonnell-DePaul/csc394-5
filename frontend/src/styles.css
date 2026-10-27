@@ -291,8 +291,28 @@ select:focus-visible {
 .review-badge { border-radius: 99px; padding: 6px 12px; font-size: .85rem; font-weight: 700; text-transform: capitalize; }
 .review-badge.pending { color: #8a5600; background: #fff3d6; }
 .review-badge.reviewed { color: #136e43; background: #dff6e9; }
+.review-badge.active { color: #136e43; background: #dff6e9; }
+.review-badge.inactive { color: #5d6b82; background: #edf1f6; }
 .review-actions { margin-top: 12px; }
+.medication-management { margin-bottom: 24px; }
+.medication-form { margin-bottom: 22px; }
+.medication-form input:not([type="checkbox"]),
+.medication-form select,
+.medication-form textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font: inherit;
+}
+.medication-form-row { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 12px; }
+.medication-active { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.medication-list { display: grid; gap: 10px; }
+.medication-item { margin-bottom: 0; }
+.medication-item p { margin: 8px 0; white-space: pre-wrap; }
 .secondary-button { background: #eaf3ff; color: var(--primary-dark); }
 .secondary-button:hover { background: #d6e7fa; color: var(--primary-dark); }
 button:disabled { opacity: .55; cursor: not-allowed; }
 @media (max-width: 760px) { .dashboard-stats { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 560px) { .medication-form-row { grid-template-columns: 1fr; gap: 0; } }

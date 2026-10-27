@@ -46,6 +46,75 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE symptom_reports ADD COLUMN doctor_note TEXT NOT NULL DEFAULT ''"
             )
+        for column, definition in (
+            ("medication_id", "INTEGER"),
+            ("medication_name", "TEXT NOT NULL DEFAULT ''"),
+            ("dosage_value", "REAL"),
+            ("dosage_unit", "TEXT NOT NULL DEFAULT ''"),
+            ("medication_frequency", "TEXT NOT NULL DEFAULT ''"),
+        ):
+            if column not in columns:
+                conn.execute(
+                    f"ALTER TABLE symptom_reports ADD COLUMN {column} {definition}"
+                )
+        if "medications_json" not in columns:
+            conn.execute(
+                "ALTER TABLE symptom_reports ADD COLUMN medications_json TEXT NOT NULL DEFAULT '[]'"
+            )
+            legacy_reports = conn.execute(
+                """
+                SELECT id, medication_id, medication_name, dosage_value,
+                       dosage_unit, medication_frequency
+                FROM symptom_reports
+                WHERE medication_name != ''
+                """
+            ).fetchall()
+            for report in legacy_reports:
+                conn.execute(
+                    """
+                    UPDATE symptom_reports
+                    SET medications_json = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        json.dumps(
+                            [
+                                {
+                                    "id": report["medication_id"],
+                                    "name": report["medication_name"],
+                                    "dosage_value": report["dosage_value"],
+                                    "dosage_unit": report["dosage_unit"],
+                                    "frequency": report["medication_frequency"],
+                                }
+                            ]
+                        ),
+                        report["id"],
+                    ),
+                )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS patient_medications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                dosage_value REAL NOT NULL CHECK (dosage_value > 0),
+                dosage_unit TEXT NOT NULL
+                    CHECK (dosage_unit IN ('mg', 'mcg', 'ml', 'g', 'tablets')),
+                frequency TEXT NOT NULL DEFAULT '',
+                instructions TEXT NOT NULL DEFAULT '',
+                active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_patient_medications_patient
+            ON patient_medications (patient_id, active, name)
+            """
+        )
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -79,24 +148,62 @@ def save_symptom_report(
     saved_notes = notes or ""
 
     with closing(get_connection()) as conn:
+        medication_rows = conn.execute(
+            """
+            SELECT id, name, dosage_value, dosage_unit, frequency
+            FROM patient_medications
+            WHERE patient_id = ? AND active = 1
+            ORDER BY name COLLATE NOCASE, id
+            """,
+            (patient_id,),
+        ).fetchall()
+        medications = [
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "dosage_value": row["dosage_value"],
+                "dosage_unit": row["dosage_unit"],
+                "frequency": row["frequency"],
+            }
+            for row in medication_rows
+        ]
+
         cursor = conn.execute(
             """
-            INSERT INTO symptom_reports (patient_id, submitted_at, symptoms_json, notes)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO symptom_reports (
+                patient_id, submitted_at, symptoms_json, notes, medication_id,
+                medication_name, dosage_value, dosage_unit, medication_frequency,
+                medications_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (patient_id, submitted_at, json.dumps(symptoms), saved_notes),
+            (
+                patient_id,
+                submitted_at,
+                json.dumps(symptoms),
+                saved_notes,
+                None,
+                "",
+                None,
+                "",
+                "",
+                json.dumps(medications),
+            ),
         )
         conn.commit()
         report_id = cursor.lastrowid
 
     logger.info("Database operation completed: save symptom report")
-    return {
+    report: dict[str, Any] = {
         "id": report_id,
         "patient_id": patient_id,
         "submitted_at": submitted_at,
         "symptoms": symptoms,
         "notes": saved_notes,
     }
+    if medications:
+        report["medications"] = medications
+    return report
 
 
 def list_symptom_reports(
@@ -112,7 +219,9 @@ def list_symptom_reports(
         ).fetchone()
         rows = conn.execute(
             """
-            SELECT id, patient_id, submitted_at, symptoms_json, notes, review_status, doctor_note
+            SELECT id, patient_id, submitted_at, symptoms_json, notes, review_status, doctor_note,
+                   medication_id, medication_name, dosage_value, dosage_unit,
+                   medication_frequency, medications_json
             FROM symptom_reports
             WHERE patient_id = ?
             ORDER BY id DESC
@@ -121,8 +230,9 @@ def list_symptom_reports(
             (patient_id, limit, offset),
         ).fetchall()
 
-    reports = [
-        {
+    reports = []
+    for row in rows:
+        report = {
             "id": row["id"],
             "patient_id": row["patient_id"],
             "submitted_at": row["submitted_at"],
@@ -131,12 +241,145 @@ def list_symptom_reports(
             "review_status": row["review_status"],
             **({"doctor_note": row["doctor_note"]} if include_doctor_notes else {}),
         }
-        for row in rows
-    ]
+        medications = _report_medications(row)
+        if medications:
+            report["medications"] = medications
+        reports.append(report)
 
     total = total_row["total"] if total_row else 0
     logger.info("Database operation completed: list symptom reports")
     return reports, total
+
+
+def _report_medications(row: sqlite3.Row) -> list[dict[str, Any]]:
+    medications = json.loads(row["medications_json"])
+    if medications or not row["medication_name"]:
+        return medications
+    return [
+        {
+            "id": row["medication_id"],
+            "name": row["medication_name"],
+            "dosage_value": row["dosage_value"],
+            "dosage_unit": row["dosage_unit"],
+            "frequency": row["medication_frequency"],
+        }
+    ]
+
+
+def list_patient_medications(patient_id: str) -> list[dict[str, Any]]:
+    with closing(get_connection()) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, patient_id, name, dosage_value, dosage_unit, frequency,
+                   instructions, active, created_at, updated_at
+            FROM patient_medications
+            WHERE patient_id = ?
+            ORDER BY active DESC, name COLLATE NOCASE, id
+            """,
+            (patient_id,),
+        ).fetchall()
+    return [_medication_from_row(row) for row in rows]
+
+
+def _medication_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "patient_id": row["patient_id"],
+        "name": row["name"],
+        "dosage_value": row["dosage_value"],
+        "dosage_unit": row["dosage_unit"],
+        "frequency": row["frequency"],
+        "instructions": row["instructions"],
+        "active": bool(row["active"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def create_patient_medication(
+    patient_id: str,
+    name: str,
+    dosage_value: float,
+    dosage_unit: str,
+    frequency: str,
+    instructions: str,
+    active: bool = True,
+) -> dict[str, Any]:
+    now = datetime.now(timezone.utc).isoformat()
+    with closing(get_connection()) as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO patient_medications (
+                patient_id, name, dosage_value, dosage_unit, frequency,
+                instructions, active, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                patient_id,
+                name,
+                dosage_value,
+                dosage_unit,
+                frequency,
+                instructions,
+                int(active),
+                now,
+                now,
+            ),
+        )
+        row = conn.execute(
+            """
+            SELECT id, patient_id, name, dosage_value, dosage_unit, frequency,
+                   instructions, active, created_at, updated_at
+            FROM patient_medications WHERE id = ?
+            """,
+            (cursor.lastrowid,),
+        ).fetchone()
+        conn.commit()
+    return _medication_from_row(row)
+
+
+def update_patient_medication(
+    medication_id: int,
+    patient_id: str,
+    dosage_value: float,
+    dosage_unit: str,
+    frequency: str,
+    instructions: str,
+    active: bool,
+) -> dict[str, Any] | None:
+    now = datetime.now(timezone.utc).isoformat()
+    with closing(get_connection()) as conn:
+        cursor = conn.execute(
+            """
+            UPDATE patient_medications
+            SET dosage_value = ?, dosage_unit = ?, frequency = ?,
+                instructions = ?, active = ?, updated_at = ?
+            WHERE id = ? AND patient_id = ?
+            """,
+            (
+                dosage_value,
+                dosage_unit,
+                frequency,
+                instructions,
+                int(active),
+                now,
+                medication_id,
+                patient_id,
+            ),
+        )
+        if cursor.rowcount == 0:
+            return None
+        row = conn.execute(
+            """
+            SELECT id, patient_id, name, dosage_value, dosage_unit, frequency,
+                   instructions, active, created_at, updated_at
+            FROM patient_medications WHERE id = ? AND patient_id = ?
+            """,
+            (medication_id, patient_id),
+        ).fetchone()
+        conn.commit()
+    return _medication_from_row(row)
 
 
 def clear_symptom_reports(patient_id: str | None = None) -> int:

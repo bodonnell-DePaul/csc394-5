@@ -7,15 +7,12 @@ from ..config import AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID
 
 
 class SymptomReportRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
     patient_id: str = FIXED_PATIENT_ID
     symptoms: list[str]
     notes: str | None = Field(default=None, max_length=1000)
-    medication_name: str | None = Field(default=None, min_length=1)
-    dosage_value: float | None = Field(default=None, gt=0)
-    dosage_unit: str | None = Field(
-        default=None,
-        pattern="^(mg|mcg|ml|g|tablets)$",
-    )
+
     @field_validator("symptoms")
     @classmethod
     def validate_symptoms(cls, value: list[str]) -> list[str]:
@@ -60,3 +57,35 @@ class DoctorReviewUpdate(BaseModel):
     @classmethod
     def clean_doctor_note(cls, value: str) -> str:
         return value.strip()
+
+
+class MedicationDetails(BaseModel):
+    dosage_value: float = Field(gt=0, allow_inf_nan=False)
+    dosage_unit: Literal["mg", "mcg", "ml", "g", "tablets"]
+    frequency: str = Field(default="", max_length=120)
+    instructions: str = Field(default="", max_length=1000)
+    active: bool = True
+
+    @field_validator("frequency", "instructions")
+    @classmethod
+    def clean_medication_text(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned and len(value) != 0:
+            raise ValueError("Medication text cannot be blank.")
+        return cleaned
+
+
+class MedicationRequest(MedicationDetails):
+    name: str = Field(min_length=1, max_length=120)
+
+    @field_validator("name")
+    @classmethod
+    def clean_medication_name(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Medication name cannot be blank.")
+        return cleaned
+
+
+class MedicationUpdate(MedicationDetails):
+    model_config = {"extra": "forbid"}

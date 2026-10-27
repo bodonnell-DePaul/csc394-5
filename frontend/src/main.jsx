@@ -68,16 +68,14 @@ function LoginForm({ onLogin, error }) {
   );
 }
 function PatientDashboard({ user, onLogout }) {
-  
-  
   const [patient, setPatient] = useState(null);
   const [symptoms, setSymptoms] = useState([]);
   const [symptomChoice, setSymptomChoice] = useState('');
   const [selectedSymptoms, setSelectedSymptoms] = useState([]);
+  const [medications, setMedications] = useState([]);
   const [reports, setReports] = useState([]);
   const [summary, setSummary] = useState(null);
   const [status, setStatus] = useState(null);
-
 
   async function refreshHistory() {
     const [reportResult, summaryResult] = await Promise.all([
@@ -96,10 +94,17 @@ function PatientDashboard({ user, onLogout }) {
 
     async function loadDemo() {
       try {
-        const [patientResult, symptomsResult, reportResult, summaryResult] =
+        const [
+          patientResult,
+          symptomsResult,
+          medicationResult,
+          reportResult,
+          summaryResult,
+        ] =
           await Promise.all([
             requestJson('/api/patient'),
             requestJson('/api/symptoms'),
+            requestJson('/api/medications'),
             requestJson('/api/symptom_report?limit=20&offset=0'),
             requestJson('/api/symptom_report/summary'),
           ]);
@@ -107,6 +112,7 @@ function PatientDashboard({ user, onLogout }) {
         if (active) {
           setPatient(patientResult.patient);
           setSymptoms(symptomsResult.symptoms);
+          setMedications(medicationResult.medications);
           setReports(reportResult.reports);
           setSummary(summaryResult.summary);
         }
@@ -155,7 +161,7 @@ function PatientDashboard({ user, onLogout }) {
       setStatus({ message: error.message, isError: true });
     }
   }
-  
+
   return (
     <div className="container">
       <header className="hero">
@@ -180,6 +186,26 @@ function PatientDashboard({ user, onLogout }) {
               <p>Loading patient profile…</p>
             )}
           </div>
+
+          <h2>My medications</h2>
+          {medications.length === 0 ? (
+            <p>No medications have been added to your record.</p>
+          ) : (
+            <div className="medication-list">
+              {medications.map((medication) => (
+                <article className="history-item medication-item" key={medication.id}>
+                  <div className="doctor-report-top">
+                    <strong>{medication.name}</strong>
+                    <span className={`review-badge ${medication.active ? 'active' : 'inactive'}`}>
+                      {medication.active ? 'Active' : 'Discontinued'}
+                    </span>
+                  </div>
+                  <p>{formatMedicationDosage(medication)}</p>
+                  {medication.instructions && <p>{medication.instructions}</p>}
+                </article>
+              ))}
+            </div>
+          )}
 
           <h2>Submit a symptom report</h2>
           <form onSubmit={submitReport}>
@@ -239,6 +265,9 @@ function PatientDashboard({ user, onLogout }) {
                 maxLength="1000"
                 placeholder="Add any details about your symptoms (up to 1,000 characters)."
               />
+              <p className="muted">
+                Your active medications will be included automatically with this report.
+              </p>
             </div>
 
             <div className="button-row">
@@ -284,6 +313,18 @@ function PatientDashboard({ user, onLogout }) {
                   {report.notes && (
                     <p className="report-notes">{report.notes}</p>
                   )}
+                  {report.medications?.length > 0 && (
+                    <div className="report-notes">
+                      <strong>Active medications at time of report:</strong>
+                      <ul>
+                        {report.medications.map((medication) => (
+                          <li key={medication.id}>
+                            {medication.name} — {formatMedicationDosage(medication)}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </article>
               ))
             )}
@@ -292,6 +333,12 @@ function PatientDashboard({ user, onLogout }) {
       </main>
     </div>
   );
+}
+
+function formatMedicationDosage(medication) {
+  return `${medication.dosage_value} ${medication.dosage_unit}${
+    medication.frequency ? ` · ${medication.frequency}` : ''
+  }`;
 }
 
 
@@ -310,7 +357,17 @@ function DoctorDashboard() {
   const [filter, setFilter] = useState('all');
   const [drafts, setDrafts] = useState({});
   const [busyId, setBusyId] = useState(null);
+  const [busyMedication, setBusyMedication] = useState(false);
   const [message, setMessage] = useState('');
+  const [editingMedicationId, setEditingMedicationId] = useState(null);
+  const [medicationDraft, setMedicationDraft] = useState({
+    name: '',
+    dosage_value: '',
+    dosage_unit: 'mg',
+    frequency: '',
+    instructions: '',
+    active: true,
+  });
 
   async function loadDashboard() {
     const data = await requestJson('/api/doctor/dashboard?limit=100');
@@ -346,6 +403,63 @@ function DoctorDashboard() {
     }
   }
 
+  function editMedication(medication) {
+    setEditingMedicationId(medication.id);
+    setMedicationDraft({
+      name: medication.name,
+      dosage_value: medication.dosage_value,
+      dosage_unit: medication.dosage_unit,
+      frequency: medication.frequency,
+      instructions: medication.instructions,
+      active: medication.active,
+    });
+  }
+
+  function resetMedicationForm() {
+    setEditingMedicationId(null);
+    setMedicationDraft({
+      name: '',
+      dosage_value: '',
+      dosage_unit: 'mg',
+      frequency: '',
+      instructions: '',
+      active: true,
+    });
+  }
+
+  async function saveMedication(event) {
+    event.preventDefault();
+    setBusyMedication(true);
+    setMessage('');
+    const isEditing = editingMedicationId !== null;
+    try {
+      await requestJson(
+        isEditing
+          ? `/api/doctor/medications/${editingMedicationId}`
+          : '/api/doctor/medications',
+        {
+          method: isEditing ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...(isEditing ? {} : { name: medicationDraft.name }),
+            dosage_value: Number(medicationDraft.dosage_value),
+            dosage_unit: medicationDraft.dosage_unit,
+            frequency: medicationDraft.frequency,
+            instructions: medicationDraft.instructions,
+            active: medicationDraft.active,
+          }),
+        },
+      );
+      await loadDashboard();
+      resetMedicationForm();
+      setMessage(isEditing ? 'Medication updated.' : 'Medication added.');
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setBusyMedication(false);
+    }
+  }
+
   const displayed = (dashboard?.reports ?? []).filter(
     (report) => filter === 'all' || report.review_status === filter
   );
@@ -361,6 +475,83 @@ function DoctorDashboard() {
         <Stat label="Reviewed" value={dashboard?.review_counts.reviewed ?? '—'} />
         <Stat label="Patient" value={dashboard?.patient.name ?? 'Loading…'} />
       </div>
+      <section className="panel medication-management">
+        <h2>Patient medications</h2>
+        <p className="muted">
+          Medication changes are restricted to authorized doctors. Patients can review this list.
+        </p>
+        <form className="medication-form" onSubmit={saveMedication}>
+          <div className="field">
+            <label className="field-label" htmlFor="medication-name">Medication name</label>
+            <input id="medication-name" required maxLength={120}
+              readOnly={editingMedicationId !== null}
+              value={medicationDraft.name}
+              onChange={(event) => setMedicationDraft((old) => ({...old, name: event.target.value}))} />
+          </div>
+          <div className="medication-form-row">
+            <div className="field">
+              <label className="field-label" htmlFor="medication-dose">Dosage</label>
+              <input id="medication-dose" type="number" min="0.001" step="any" required
+                value={medicationDraft.dosage_value}
+                onChange={(event) => setMedicationDraft((old) => ({...old, dosage_value: event.target.value}))} />
+            </div>
+            <div className="field">
+              <label className="field-label" htmlFor="medication-unit">Unit</label>
+              <select id="medication-unit" value={medicationDraft.dosage_unit}
+                onChange={(event) => setMedicationDraft((old) => ({...old, dosage_unit: event.target.value}))}>
+                {['mg', 'mcg', 'ml', 'g', 'tablets'].map((unit) => <option key={unit}>{unit}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label className="field-label" htmlFor="medication-frequency">Frequency</label>
+              <input id="medication-frequency" maxLength={120} placeholder="e.g. twice daily"
+                value={medicationDraft.frequency}
+                onChange={(event) => setMedicationDraft((old) => ({...old, frequency: event.target.value}))} />
+            </div>
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="medication-instructions">Instructions</label>
+            <textarea id="medication-instructions" maxLength={1000} rows={2}
+              value={medicationDraft.instructions}
+              onChange={(event) => setMedicationDraft((old) => ({...old, instructions: event.target.value}))} />
+          </div>
+          <label className="medication-active">
+            <input type="checkbox" checked={medicationDraft.active}
+              onChange={(event) => setMedicationDraft((old) => ({...old, active: event.target.checked}))} />
+            Active medication
+          </label>
+          <div className="button-row">
+            <button type="submit" disabled={busyMedication}>
+              {busyMedication ? 'Saving…' : editingMedicationId === null ? 'Add medication' : 'Save medication'}
+            </button>
+            {editingMedicationId !== null && (
+              <button type="button" className="secondary-button" onClick={resetMedicationForm}>
+                Cancel
+              </button>
+            )}
+          </div>
+        </form>
+        {(dashboard?.medications ?? []).length === 0 ? (
+          <p>No medications have been added yet.</p>
+        ) : (
+          <div className="medication-list">
+            {dashboard.medications.map((medication) => (
+              <article className="history-item medication-item" key={medication.id}>
+                <div className="doctor-report-top">
+                  <strong>{medication.name}</strong>
+                  <span className={`review-badge ${medication.active ? 'active' : 'inactive'}`}>
+                    {medication.active ? 'Active' : 'Discontinued'}
+                  </span>
+                </div>
+                <p>{formatMedicationDosage(medication)}</p>
+                {medication.instructions && <p>{medication.instructions}</p>}
+                <button type="button" className="secondary-button"
+                  onClick={() => editMedication(medication)}>Edit medication</button>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
       <section className="panel">
         <div className="doctor-toolbar">
           <h2>Patient symptom reports</h2>
@@ -384,6 +575,18 @@ function DoctorDashboard() {
             </div>
             <div className="pill-list">{report.symptoms.map((symptom) => <span className="pill" key={symptom}>{symptom}</span>)}</div>
             <p><strong>Patient notes:</strong> {report.notes || 'No additional details'}</p>
+            {report.medications?.length > 0 && (
+              <div>
+                <strong>Active medications at time of report:</strong>
+                <ul>
+                  {report.medications.map((medication) => (
+                    <li key={medication.id}>
+                      {medication.name} — {formatMedicationDosage(medication)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <label className="field-label" htmlFor={`doctor-note-${report.id}`}>Doctor review notes</label>
             <textarea id={`doctor-note-${report.id}`} maxLength={1000} rows={3}
               value={drafts[report.id] ?? report.doctor_note ?? ''}

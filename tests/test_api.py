@@ -49,12 +49,14 @@ class ApiIntegrationTests(unittest.TestCase):
 
 
     def test_symptoms_endpoint_returns_supported_choices(self):
+        """Return the configured symptom choices from the public endpoint."""
         response = self.client.get("/api/symptoms")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"symptoms": AVAILABLE_SYMPTOMS})
 
     def test_public_routes_return_expected_responses(self):
+        """Serve the web app, health check, and auth status without login."""
         index_response = self.client.get("/")
         health_response = self.client.get("/health")
         auth_status_response = self.client.get("/api/auth/status")
@@ -71,6 +73,7 @@ class ApiIntegrationTests(unittest.TestCase):
         )
 
     def test_auth_login_me_and_logout_lifecycle(self):
+        """Verify successful login, session lookup, logout, and bad credentials."""
         current_user = self.client.get("/api/auth/me")
         self.assertEqual(current_user.status_code, 200)
         self.assertEqual(
@@ -107,6 +110,7 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/auth/me").status_code, 401)
 
     def test_auth_me_rejects_missing_or_invalid_session(self):
+        """Reject missing and unrecognized session cookies."""
         self.client.post("/api/auth/logout")
         self.assertEqual(self.client.get("/api/auth/me").status_code, 401)
 
@@ -120,6 +124,7 @@ class ApiIntegrationTests(unittest.TestCase):
         )
 
     def test_patient_profile_and_summary_routes(self):
+        """Return the authenticated patient's profile and symptom summary."""
         database.save_symptom_report(
             FIXED_PATIENT_ID, ["Nausea", "Headache"]
         )
@@ -146,6 +151,7 @@ class ApiIntegrationTests(unittest.TestCase):
         )
 
     def test_patient_profile_and_summary_reject_unknown_patient(self):
+        """Return not found when profile or summary targets an unknown patient."""
         profile = self.client.get("/api/patient", params={"patient_id": "unknown"})
         summary = self.client.get(
             "/api/symptom_report/summary",
@@ -163,45 +169,43 @@ class ApiIntegrationTests(unittest.TestCase):
             {"detail": "Patient not found."},
         )
 
-    def test_clear_reports_only_deletes_authenticated_patient_history(self):
+    def test_patients_cannot_delete_symptom_reports(self):
+        """Reject report deletion and preserve the patient's saved history."""
         database.save_symptom_report(FIXED_PATIENT_ID, ["Nausea"])
         database.save_symptom_report(FIXED_PATIENT_ID, ["Headache"])
-        database.save_symptom_report("another-patient", ["Fatigue"])
 
         response = self.client.delete("/api/symptom_report")
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.json(),
-            {"message": "Symptom history cleared.", "deleted_rows": 2},
-        )
-        self.assertEqual(database.list_symptom_reports(
-            FIXED_PATIENT_ID, limit=20, offset=0
-        ), ([], 0))
+        self.assertEqual(response.status_code, 405)
         self.assertEqual(
             database.list_symptom_reports(
-                "another-patient", limit=20, offset=0
+                FIXED_PATIENT_ID, limit=20, offset=0
             )[1],
-            1,
+            2,
         )
 
     def test_patient_routes_require_authentication(self):
+        """Require a patient session for private report and profile endpoints."""
         self.client.post("/api/auth/logout")
 
         responses = [
             self.client.get("/api/patient"),
             self.client.get("/api/symptom_report/summary"),
             self.client.get("/api/symptom_report"),
-            self.client.delete("/api/symptom_report"),
             self.client.post(
                 "/api/symptom_report",
                 json={"symptoms": ["Nausea"]},
             ),
         ]
 
-        self.assertEqual([response.status_code for response in responses], [401] * 5)
+        self.assertEqual([response.status_code for response in responses], [401] * 4)
+        self.assertEqual(
+            self.client.delete("/api/symptom_report").status_code,
+            405,
+        )
 
     def test_requests_are_logged_with_method_path_and_status(self):
+        """Log request method, path, and response status for success and errors."""
         with self.assertLogs("uvicorn.error", level=logging.INFO) as captured:
             success_response = self.client.get("/health")
             error_response = self.client.get(
@@ -216,6 +220,7 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertIn("GET /api/symptom_report completed with status 403", output)
 
     def test_create_then_list_report_preserves_json_data_and_page_schema(self):
+        """Normalize submitted report data and preserve response/list schemas."""
         create_response = self.client.post(
             "/api/symptom_report",
             json={
@@ -264,6 +269,7 @@ class ApiIntegrationTests(unittest.TestCase):
 
 
     def test_invalid_report_payloads_return_validation_errors(self):
+        """Reject empty, unsupported, or malformed symptom report payloads."""
         invalid_payloads = [
             ({"symptoms": []}, "Please select at least one symptom."),
             (
@@ -287,6 +293,7 @@ class ApiIntegrationTests(unittest.TestCase):
                 )
 
     def test_oversized_patient_notes_are_rejected_without_saving_report(self):
+        """Reject notes beyond the size limit without persisting the report."""
         response = self.client.post(
             "/api/symptom_report",
             json={"symptoms": ["Nausea"], "notes": "x" * 1001},
@@ -300,6 +307,7 @@ class ApiIntegrationTests(unittest.TestCase):
         )
 
     def test_patient_notes_at_maximum_length_are_accepted(self):
+        """Accept and persist notes exactly at the configured length limit."""
         notes = "x" * 1000
         response = self.client.post(
             "/api/symptom_report",
@@ -315,6 +323,7 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(reports[0]["notes"], notes)
 
     def test_invalid_pagination_returns_validation_error(self):
+        """Reject invalid page sizes and negative offsets."""
         for params in ({"limit": 0}, {"limit": 101}, {"offset": -1}):
             with self.subTest(params=params):
                 response = self.client.get("/api/symptom_report", params=params)
@@ -323,6 +332,7 @@ class ApiIntegrationTests(unittest.TestCase):
                 self.assertEqual(set(response.json()), {"detail"})
 
     def test_unknown_patient_is_not_found(self):
+        """Prevent access to reports belonging to a different patient ID."""
         response = self.client.get(
             "/api/symptom_report",
             params={"patient_id": "unknown"},
@@ -335,6 +345,7 @@ class ApiIntegrationTests(unittest.TestCase):
 )
 
     def test_database_failure_returns_safe_error_and_logs_details(self):
+        """Return a generic database error while logging the internal failure."""
         def fail_to_save(*args, **kwargs):
             raise sqlite3.OperationalError("private database details")
 

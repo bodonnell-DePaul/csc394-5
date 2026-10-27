@@ -27,18 +27,20 @@ class DoctorDashboardTests(unittest.TestCase):
         self.client.__enter__()
         self.addCleanup(self.client.__exit__, None, None, None)
 
-        database.create_user(
-            email="patient@example.com",
-            password_hash=password_hasher.hash("PatientPassword123!"),
-            role="patient",
-            patient_id=FIXED_PATIENT_ID,
-        )
+        if database.get_user_by_email("patient@example.com") is None:
+            database.create_user(
+                email="patient@example.com",
+                password_hash=password_hasher.hash("PatientPassword123!"),
+                role="patient",
+                patient_id=FIXED_PATIENT_ID,
+            )
 
-        database.create_user(
-            email="doctor@example.com",
-            password_hash=password_hasher.hash("DoctorPassword123!"),
-            role="doctor",
-        )
+        if database.get_user_by_email("doctor@example.com") is None:
+            database.create_user(
+                email="doctor@example.com",
+                password_hash=password_hasher.hash("DoctorPassword123!"),
+                role="doctor",
+            )
 
     def login(self, role):
         credentials = {
@@ -54,6 +56,7 @@ class DoctorDashboardTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_doctor_can_review_and_save_notes(self):
+        """Allow doctors to review reports while hiding doctor notes from patients."""
         self.login("patient")
 
         created = self.client.post(
@@ -110,6 +113,7 @@ class DoctorDashboardTests(unittest.TestCase):
         self.assertNotIn("doctor_note", patient["reports"][0])
 
     def test_missing_report_and_invalid_status(self):
+        """Reject unauthenticated reviews, missing reports, and unknown statuses."""
         # Unauthenticated requests are rejected.
         unauthenticated = self.client.get("/api/doctor/dashboard")
         self.assertEqual(unauthenticated.status_code, 401)
@@ -129,6 +133,7 @@ class DoctorDashboardTests(unittest.TestCase):
         self.assertEqual(invalid.status_code, 422)
 
     def test_dashboard_paginates_and_includes_review_details(self):
+        """Include scoped report details and correct counts on dashboard pages."""
         first = database.save_symptom_report(
             FIXED_PATIENT_ID, ["Nausea"], "First patient note"
         )
@@ -167,6 +172,7 @@ class DoctorDashboardTests(unittest.TestCase):
         self.assertNotEqual(body["reports"][0]["id"], third["id"])
 
     def test_review_endpoint_rejects_patients_and_oversized_notes(self):
+        """Restrict review writes to doctors and enforce the note size limit."""
         report = database.save_symptom_report(FIXED_PATIENT_ID, ["Nausea"])
         self.login("patient")
 
@@ -192,6 +198,7 @@ class DoctorDashboardTests(unittest.TestCase):
         self.assertEqual(reports[0]["doctor_note"], "")
 
     def test_doctor_routes_require_auth_and_validate_pagination_and_report_id(self):
+        """Protect doctor endpoints and validate page parameters and report IDs."""
         unauthenticated_review = self.client.patch(
             "/api/doctor/reports/1",
             json={"review_status": "reviewed", "doctor_note": ""},
@@ -214,6 +221,7 @@ class DoctorDashboardTests(unittest.TestCase):
         self.assertEqual(invalid_report_id.status_code, 422)
 
     def test_empty_doctor_note_is_saved_when_reviewing_report(self):
+        """Trim a whitespace-only doctor note to an empty saved value."""
         report = database.save_symptom_report(
             FIXED_PATIENT_ID, ["Nausea"], "Patient report note"
         )
@@ -238,6 +246,7 @@ class DoctorDashboardTests(unittest.TestCase):
         self.assertEqual(reports[0]["review_status"], "reviewed")
 
     def test_doctor_note_at_maximum_length_is_accepted(self):
+        """Accept and persist doctor notes at the maximum allowed length."""
         report = database.save_symptom_report(FIXED_PATIENT_ID, ["Headache"])
         note = "x" * 1000
         self.login("doctor")

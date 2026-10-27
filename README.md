@@ -1,58 +1,94 @@
-# Healthwatch symptom-reporting demo
+# Healthwatch
 
-This vertical slice demonstrates one patient feature: select symptoms, submit a report, and see the saved report in the patient's history. It uses a fixed synthetic patient and stores reports in SQLite. It does not include authentication, doctor views, diagnosis, or treatment recommendations.
+Healthwatch is a synthetic patient-monitoring demo with authenticated patient
+and doctor dashboards. Doctors maintain a patient's medication list; patients
+can review the list and associate an active medication with a symptom report.
+The medication and symptom history is stored in SQLite.
 
-## API
+## Run locally
 
+1. Install Node.js 18 or newer, then build the React client:
 
-HTTP errors
-- Invalid request bodies or query parameters return 422.
-- Unknown patient IDs return 404.
-- Successful symptom report creation returns 201.
-- Database failures return 500 with a generic message; the server logs the underlying error.
-- The server logs each request's method, path, status code, and duration; query parameters and request bodies are not logged.
-- Reports may include optional notes up to 1,000 characters; notes are saved with report history.
-
-Demo setup
-1. Install Node.js (18 or newer) and create a production build of the React client:
+   ```powershell
    npm install
    npm run build
-   The build output is written to src/public/, which is served by FastAPI.
-2. Create a virtual environment and install Python dependencies:
+   ```
+
+2. Create and activate a Python virtual environment, then install dependencies:
+
+   ```powershell
    python -m venv .venv
    .\.venv\Scripts\Activate.ps1
    python -m pip install -r requirements.txt
-3. Start the server from the project root:
+   ```
+
+3. Start the API and open `http://127.0.0.1:8000`:
+
+   ```powershell
    python -m src.server.main
-4. Open http://127.0.0.1:8000 in a browser.
+   ```
 
-For client development with hot reload, start the API with
-`python -m src.server.main` and, in a second terminal, run `npm run dev`.
-Vite serves the client and proxies `/api` requests to the FastAPI server.
+On startup, the demo seeds these login accounts if they do not already exist:
 
-Project structure
-- src/server/main.py: FastAPI app factory, startup wiring, and development server entry point
-- src/server/error_handlers.py: database exception logging and HTTP 500 responses
-- src/config.py: shared app constants and synthetic patient profile
-- src/server/database.py: SQLite access and report persistence
-- src/routes/routes.py: endpoint definitions
-- src/middleware/schemas.py: request validation models
-- src/public/: browser UI assets
-- frontend/src/: React client source
-- vite.config.js: Vite development proxy and production build configuration
-- src/data/healthwatch.db: demo database
-=======
-- `POST /api/symptom_report` creates a report for the demo patient.
-- `GET /api/symptom_report?limit=20&offset=0` lists that patient's saved reports.
-- `GET /api/symptoms` returns the symptom choices shown by the form.
+| Role | Email | Password |
+|---|---|---|
+| Patient | `patient@example.com` | `PatientPassword123!` |
+| Doctor | `doctor@example.com` | `DoctorPassword123!` |
 
-The demo intentionally uses synthetic data only and is not suitable for real patient information or clinical use.
+Seeding is idempotent and does not reset credentials for existing accounts.
+These public demo credentials are for local synthetic data only; do not use
+them for a deployed or production system.
 
-## MCP
-In order to allow doctors to make instantaneous changes such as changing prescription dosages or create appointments for patients, an AI assistant will orchestrate multiple MCP tools to run these processes seamlessly:
-1. code_grep_search: Examine all medications in the database whose status declares they must be modified.
-2. file_write_contents: Generates new React components for the doctor dashboard patient logging screen; implements push notifications in relation to database changes.
-3. sql_execute_query: Ensures that patient's logged symptoms were saved, or to ensure the database the recorded the patients and their corresponding medications that are being updated/are updated.
-4. run_terminal_command: runs integration tests to ensure that notifications are triggered once doctors make alterations.
-5. 
+For frontend development with hot reload, run `npm run dev` in a second
+terminal. Vite proxies `/api` requests to the FastAPI server. The server
+initializes and migrates the SQLite schema at startup. Set
+`HEALTHWATCH_DB_PATH` to use a different database file.
 
+## Medication and report access
+
+- Patients can read their medication list with `GET /api/medications`. There is
+  no patient medication write endpoint.
+- Authenticated doctors can add medications with
+  `POST /api/doctor/medications` and edit dosage, frequency, instructions, or
+  active status with
+  `PATCH /api/doctor/medications/{medication_id}`.
+- Medication names are fixed when created and cannot be changed. Creation
+  requests include `name`, `dosage_value`, `dosage_unit`, and optionally
+  `frequency`, `instructions`, and `active`. Supported units
+  are `mg`, `mcg`, `ml`, `g`, and `tablets`.
+- Every symptom report automatically includes a snapshot of all medications
+  active for the patient when it is submitted. Patients do not select
+  medications manually. Later medication edits or discontinuations do not
+  rewrite report history.
+- Doctors see medication information alongside symptom reports in the doctor
+  dashboard. The patient dashboard shows medication history and report-linked
+  medication details.
+
+## Other API endpoints
+
+- `POST /api/symptom_report` creates a symptom report.
+- `GET /api/symptom_report?limit=20&offset=0` lists the authenticated patient's
+  reports.
+- `GET /api/symptom_report/summary` returns that patient's report summary.
+- `GET /api/doctor/dashboard` returns the doctor dashboard, including
+  medications and symptom reports.
+- Patients cannot delete symptom reports; the API does not expose a delete
+  endpoint for symptom history.
+
+API requests that require a role return `401` when unauthenticated and `403`
+when the account does not have the required role. Invalid request data returns
+`422`.
+
+## Project structure
+
+- `src/server/main.py`: FastAPI app factory, startup wiring, and server entry point
+- `src/routes/database.py`: SQLite schema, migrations, and persistence
+- `src/routes/routes.py`: API endpoints
+- `src/routes/auth.py`: authentication and role checks
+- `src/middleware/schemas.py`: request validation models
+- `frontend/src/`: React client
+- `src/public/`: production frontend build served by FastAPI
+- `tests/`: API, persistence, authentication, and dashboard tests
+
+This project uses synthetic demo data only. It is not intended for real patient
+information or clinical use.

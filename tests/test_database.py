@@ -22,6 +22,7 @@ class DatabaseTests(unittest.TestCase):
         database.init_db()
 
     def test_init_db_adds_notes_to_existing_report_table(self):
+        """Migrate a legacy report table and create medication storage."""
         legacy_path = Path(self.temp_dir.name) / "legacy.db"
         with patch.object(database, "DB_PATH", legacy_path):
             with closing(sqlite3.connect(legacy_path)) as conn:
@@ -44,9 +45,84 @@ class DatabaseTests(unittest.TestCase):
                 row[1] for row in conn.execute("PRAGMA table_info(symptom_reports)")
             }
 
-        self.assertTrue({"notes", "review_status", "doctor_note"} <= columns)
+        self.assertTrue(
+            {
+                "notes",
+                "review_status",
+                "doctor_note",
+                "medication_id",
+                "medication_name",
+                "dosage_value",
+                "dosage_unit",
+                "medication_frequency",
+                "medications_json",
+            }
+            <= columns
+        )
+        with closing(sqlite3.connect(legacy_path)) as conn:
+            tables = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+        self.assertIn("patient_medications", tables)
+
+    def test_init_db_migrates_existing_single_medication_snapshots(self):
+        legacy_path = Path(self.temp_dir.name) / "legacy-medication.db"
+        with closing(sqlite3.connect(legacy_path)) as conn:
+            conn.execute(
+                """
+                CREATE TABLE symptom_reports (
+                    id INTEGER PRIMARY KEY,
+                    patient_id TEXT NOT NULL,
+                    submitted_at TEXT NOT NULL,
+                    symptoms_json TEXT NOT NULL,
+                    notes TEXT NOT NULL DEFAULT '',
+                    review_status TEXT NOT NULL DEFAULT 'pending',
+                    doctor_note TEXT NOT NULL DEFAULT '',
+                    medication_id INTEGER,
+                    medication_name TEXT NOT NULL DEFAULT '',
+                    dosage_value REAL,
+                    dosage_unit TEXT NOT NULL DEFAULT '',
+                    medication_frequency TEXT NOT NULL DEFAULT ''
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO symptom_reports (
+                    id, patient_id, submitted_at, symptoms_json, medication_id,
+                    medication_name, dosage_value, dosage_unit, medication_frequency
+                )
+                VALUES (1, 'patient-a', '2026-01-01', '["Nausea"]',
+                        9, 'Legacy medication', 5, 'mg', 'daily')
+                """
+            )
+            conn.commit()
+
+        with patch.object(database, "DB_PATH", legacy_path):
+            database.init_db()
+            reports, total = database.list_symptom_reports(
+                "patient-a", limit=20, offset=0
+            )
+
+        self.assertEqual(total, 1)
+        self.assertEqual(
+            reports[0]["medications"],
+            [
+                {
+                    "id": 9,
+                    "name": "Legacy medication",
+                    "dosage_value": 5.0,
+                    "dosage_unit": "mg",
+                    "frequency": "daily",
+                }
+            ],
+        )
 
     def test_users_are_normalized_and_sessions_expire_and_can_be_deleted(self):
+        """Normalize email, hash session tokens, and enforce session expiry."""
         user_id = database.create_user(
             " Patient@Example.com ",
             "stored-password-hash",
@@ -103,6 +179,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIsNone(database.get_session_user(token))
 
     def test_user_role_and_email_constraints(self):
+        """Reject invalid roles and duplicate emails regardless of case."""
         with self.assertRaisesRegex(ValueError, "Invalid user role"):
             database.create_user("invalid@example.com", "hash", role="admin")
 
@@ -111,6 +188,7 @@ class DatabaseTests(unittest.TestCase):
             database.create_user("PATIENT@example.com", "another-hash")
 
     def test_review_updates_and_counts_are_patient_scoped(self):
+        """Limit report review updates and doctor notes to the target patient."""
         report = database.save_symptom_report("patient-a", ["Nausea"])
         database.save_symptom_report("patient-b", ["Fatigue"])
 
@@ -144,6 +222,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(doctor_reports[0]["doctor_note"], "Call next week")
 
     def test_reports_are_persisted_and_paginated(self):
+        """Persist reports and return patient-scoped pages newest first."""
         patient_id = "patient-a"
         first = database.save_symptom_report(patient_id, ["Nausea"])
         second = database.save_symptom_report(patient_id, ["Headache"], "Follow up")
@@ -176,6 +255,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(reports[0]["symptoms"], ["Headache"])
 
     def test_successful_database_operations_are_logged_without_report_data(self):
+        """Log database activity without exposing report contents."""
         with self.assertLogs("uvicorn.error", level=logging.INFO) as captured:
             database.init_db()
             database.save_symptom_report("patient-a", ["Private symptom"], "Private note")
@@ -193,6 +273,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertNotIn("Private note", output)
 
     def test_summary_and_patient_scoped_clear(self):
+        """Summarize symptoms by patient and clear only the requested history."""
         database.save_symptom_report("patient-a", ["Nausea", "Headache"])
         database.save_symptom_report("patient-a", ["Nausea"])
         database.save_symptom_report("patient-b", ["Fatigue"])
