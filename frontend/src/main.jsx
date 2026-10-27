@@ -338,6 +338,11 @@ function DoctorDashboard() {
         }),
       });
       await loadDashboard();
+      setDrafts((previous) => {
+        const next = { ...previous };
+        delete next[report.id];
+        return next;
+      });
       setMessage('Review saved successfully.');
     } catch (error) {
       setMessage(error.message);
