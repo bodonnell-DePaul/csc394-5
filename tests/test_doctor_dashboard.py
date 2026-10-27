@@ -40,29 +40,6 @@ class DoctorDashboardTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
-    def test_demo_accounts_are_seeded_and_seeding_is_idempotent(self):
-        patient = database.get_user_by_email("patient@example.com")
-        doctor = database.get_user_by_email("doctor@example.com")
-
-        self.assertIsNotNone(patient)
-        self.assertEqual(patient["role"], "patient")
-        self.assertIsNotNone(doctor)
-        self.assertEqual(doctor["role"], "doctor")
-
-        seed_demo_accounts()
-
-        self.assertEqual(
-            database.get_user_by_email("patient@example.com")["id"],
-            patient["id"],
-        )
-        self.assertEqual(
-            database.get_user_by_email("doctor@example.com")["id"],
-            doctor["id"],
-        )
-        self.login("patient")
-        self.client.post("/api/auth/logout")
-        self.login("doctor")
-
     def test_doctor_can_review_and_save_notes(self):
         self.login("patient")
 

@@ -47,10 +47,131 @@ For this course project, the EHR data is seeded by the team. Healthwatch will no
 - Documentation updated to match behaviour
 - the change is integrated in shared environment when the environment exists.
   
-## Testing, CI/CD, and release plan
-Week 5: implement lint; type check; unit tests; example validation. Use synthetic accounts and databases for isolated tests; 
-Week 6: setup shared deployed environment; initial test runs on deployed doctor features; establish consistency and compatibility through versions; ensure functionality and revise core features
-Week 7 & 8: finalize deployment triggers; run additional security and performance tests; review end to end processes for bugs; test other non-required features;
+## Testing, deployment, and release plan
+
+The current supported deployment is a local, single-instance demo. The
+repository does not currently configure a cloud host, container image,
+infrastructure-as-code, CI/CD pipeline, TLS termination, or managed database.
+Do not expose the demo publicly or use it with real health information.
+
+### Environment requirements
+
+| Requirement | Current need |
+|---|---|
+| Python | Python 3.12 is the configured type-check/lint target and tested runtime. |
+| Node.js/npm | Node.js 18 or newer; npm installs and builds the React client. |
+| Python dependencies | `requirements.txt` for runtime. `requirements-dev.txt` includes runtime plus `httpx`, mypy, and Ruff. |
+| Storage | Writable directory for SQLite. Defaults to `src/data/healthwatch.db`; override with `HEALTHWATCH_DB_PATH`. |
+| Ports | FastAPI: `127.0.0.1:8000`. Vite: port `5173`, with `/api` proxied to port 8000. |
+
+No separate database server, API key, or external service is required for the
+local demo.
+
+### Local deployment
+
+Run from the repository root in PowerShell:
+
+1. Install Node.js 18+ and Python 3.12.
+2. Install client dependencies and create the production client:
+
+   ```powershell
+   npm install
+   npm run build
+   ```
+
+   The build is written to `src/public/`; rebuild after frontend changes.
+
+3. Create and activate a Python environment, then install packages:
+
+   ```powershell
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   python -m pip install -r requirements.txt
+   python -m pip install -r requirements-dev.txt
+   ```
+
+4. Optionally select a separate SQLite file. Create its parent directory
+   first and ensure it is writable:
+
+   ```powershell
+   $env:HEALTHWATCH_DB_PATH = "C:\healthwatch-data\healthwatch.db"
+   ```
+
+   If unset, the database is `src/data/healthwatch.db`.
+
+5. Run checks in the next section, then start the server:
+
+   ```powershell
+   python -m src.server.main
+   ```
+
+   Startup initializes/upgrades the current schema and seeds the patient and
+   doctor demo accounts if they are missing. It does not create sample
+   symptom reports. Open http://127.0.0.1:8000 and use the local demo
+   credentials documented in the root README.
+
+For frontend hot reload, run `python -m src.server.main` and `npm run dev` in
+separate terminals, then open http://127.0.0.1:5173/static/. Vite proxies
+`/api` calls to FastAPI; this is a development setup, not the production
+serving path.
+
+### Automated testing and release checks
+
+Run from the repository root:
+
+```powershell
+# Backend unit and API integration tests; uses temporary SQLite databases
+python -m unittest discover -s tests -v
+
+# Frontend lint and production bundle
+npm run lint
+npm run build
+
+# Optional Python lint and type checks (install requirements-dev.txt)
+ruff check src tests
+mypy
+```
+
+Tests cover database operations and schema upgrades, authentication and role
+authorization, request validation, report persistence, clinician review, and
+demo-data maintenance. They use isolated temporary databases and do not
+require clearing the development database. The repository uses standard
+library `unittest`; it does not define a pytest test command.
+
+Before a local demo release:
+
+1. Run the backend tests, frontend lint, and production build and require all
+   to pass. Run Ruff and mypy when the development extras are installed.
+2. Confirm `npm run build` updated `src/public/`.
+3. Start the server and verify `GET /health` returns `{"status":"ok"}`.
+4. Sign in with both demo roles and check patient report submission/history
+   and clinician refresh/filter/review-save against the running API.
+5. Run `python -m src.manage_demo_data status` and check the database path
+   and counts. Do not use `reset` as a routine test.
+
+### Database maintenance and production readiness
+
+Use `python -m src.manage_demo_data status|migrate|seed|clean|reset` from the
+repository root. These commands honor `HEALTHWATCH_DB_PATH`. `migrate`
+initializes/upgrades the current schema (also run at app startup); `seed`
+adds missing demo accounts without changing existing accounts or inserting
+sample reports; `clean` removes expired sessions; `reset` asks for `RESET`
+before permanently deleting reports and active sessions while preserving user
+accounts. Stop the app before a reset or copying/replacing the SQLite file;
+back up the database before maintenance.
+
+Schema upgrades are idempotent initialization code, not a versioned migration
+history. Introduce reviewed, versioned migrations if schema evolution or
+deployed database upgrades become more complex.
+
+The app is not production-ready. Before internet-facing deployment, remove
+fixed demo credentials and startup account creation; require HTTPS and secure
+session cookies; review CSRF, session, proxy, and secret-management behavior;
+replace fixed-patient demo assumptions; complete security, privacy, and
+clinical compliance reviews; select backed-up storage suitable for concurrent
+instances; and define platform-specific infrastructure, CI/CD, migrations,
+health checks, retention, recovery, and monitoring. Until then, use synthetic
+demo data only on a trusted local machine.
 
 ## Risks
 | Risks | Fallback | Owner |

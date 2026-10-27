@@ -1,71 +1,52 @@
-name: CSC 394 TaskBoard CI/CD Pipeline
+name: Healthwatch CI
 
-on: 
+on:
   push:
-  pull_request: 
-   branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
-  backend-checks: 
-    name: FastAPI Security & Testing Gate
+  backend:
+    name: Backend tests
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Python Environment
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
 
-      - name: Install Dependencies 
-        run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install pytest flake8 httpx
-      - name: Run Code Style Checks (Linting)
-        run: |
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements-dev.txt
 
-   
-      - name: Execute Automated Test Suite (Pytest)
-        run: |
-          pytest --maxfail=1 --disable-warnings
+      - name: Run backend tests
+        run: python -m unittest discover -s tests -v
 
-
-  frontend-checks:
-    name:  React Dashboard Quality Gate
+  frontend:
+    name: Frontend lint and build
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js Environment
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: package-lock.json
 
-      - name: Install Frontend Dependencies Cleanly
-        working-directory: ./frontend
+      - name: Install Node dependencies
         run: npm ci
 
-      - name: Verify Interface Compiles (Build Check)
-        working-directory: ./frontend
-        run: npm run build --if-present
+      - name: Lint frontend
+        run: npm run lint
 
-
-  deploy-staging:
-    name: 🚀 Continuous Delivery Deployment Gate
-    needs: [backend-checks, frontend-checks]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
-    steps:
-      - name: Promote Build to Staging Environment
-        run: |
-          echo "All Healthwatch quality checks passed successfully!"
-          echo "Automatically promoting verified build to Staging..."
-    
+      - name: Build frontend
+        run: npm run build
