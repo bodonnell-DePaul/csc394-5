@@ -1,58 +1,96 @@
-# 2. Architecture
+# Healthwatch application architecture
 
-## Component boundaries
+## Current system
+
+Healthwatch is a small, single-service symptom-reporting application. The React
+client calls a FastAPI API; the API enforces login and role access, validates
+requests, and reads or writes a local SQLite database. In production-build
+mode, FastAPI serves the built client and API from the same origin.
 
 ```mermaid
 flowchart LR
-    subgraph Auth["Authentication Layer"]
-        AuthService["JWT Auth Service<br/>Validates credentials<br/>Generates tokens<br/>Enforces role-based access"]
-    end
+    Browser["Browser"]
+    React["React 19 client<br/>frontend/src"]
+    Vite["Vite dev server<br/>development only"]
+    API["FastAPI application<br/>routes, validation,<br/>authentication"]
+    SQLite["SQLite file<br/>users, sessions,<br/>symptom reports"]
+    Seed["Startup setup<br/>schema initialization<br/>demo-account seeding"]
+    Tools["Demo data CLI<br/>status, migrate, seed,<br/>clean, reset"]
 
-    subgraph Client["Client Layer"]
-        UI["React Client<br/>Displays messages, medical information,<br/>severity queues, and symptom report form"]
-    end
-
-    subgraph Backend["Python Processing Layer"]
-        PY["Python Backend / ETL Script<br/>Loads OpenFDA dataset<br/>Normalizes and validates records<br/>Writes to SQLite"]
-    end
-
-    subgraph Data["Local Data Layer"]
-        Dataset["OpenFDA Drug Event Dataset"]
-        SQLite["SQLite Database<br/>patients, symptom_reports, medications, tickets"]
-    end
-
-    UI -->|"Authenticate with credentials"| AuthService
-    AuthService -->|"Issue JWT token"| UI
-    UI -->|"Include token in requests"| Backend
-    Backend -->|"Verify token"| AuthService
-    Dataset --> PY
-    PY --> SQLite
-    Backend <-->|"Read and write patient, medication,<br/>and ticket records with role-based access"| SQLite
+    Browser --> React
+    React -->|"Same-origin /api requests<br/>and HttpOnly session cookie"| API
+    Vite -->|"Proxies /api to :8000"| API
+    API --> SQLite
+    Seed --> SQLite
+    Tools --> SQLite
+    API -->|"Production build: /static"| Browser
 ```
 
-Component Descriptions
+## Component responsibilities
 
-| Component | Owns | Does Not Own |
-|---|---|---|
-| JWT Auth Service | credential validation; token generation; role-based access enforcement; token verification | user interface; database management |
-| React Client | displays messages, medical information, and severity queues; symptom report form access; manages auth tokens | database access; authentication logic |
-| Python Backend / ETL | loads and normalizes the OpenFDA dataset; validates symptom severity matching; writes to SQLite; verifies incoming JWT tokens | user interface behavior; decision-making on behalf of doctors; credential management |
-| SQLite + OpenFDA Drug Event Data Set | provides past information of patients, drug use, their physicians, and logged side effects; stores normalized patient, medication, symptom, and ticket records | authentication; access control decisions |
+| Component | Responsibilities |
+|---|---|
+| React client (`frontend/src/main.jsx`, `styles.css`) | Login, role-specific screens, patient symptom submission/history, clinician report filtering and review actions. Uses JSON API responses; it does not connect directly to SQLite. |
+| Vite (`vite.config.js`) | Local frontend development and `/api` proxy to `http://127.0.0.1:8000`; produces the static client build under `src/public/`. |
+| FastAPI app (`src/server/main.py`) | Registers API and auth routes, error handlers, request logging, serves `/static`, and initializes the database and demo accounts at startup. |
+| Routes and schemas (`src/routes/`, `src/middleware/schemas.py`) | Validate request data, apply patient/doctor authorization dependencies, and coordinate symptom report and review operations. |
+| Authentication (`src/routes/auth.py`) | Verifies Argon2 password hashes, creates opaque random sessions, stores only a SHA-256 token hash, and sends the session token in an HttpOnly cookie. |
+| SQLite data layer (`src/routes/database.py`) | Creates/upgrades the current schema and performs parameterized queries for accounts, sessions, report history, summaries, and reviews. |
+| Demo-data CLI (`src/manage_demo_data.py`) | Inspects counts and explicitly migrates, seeds demo users, removes expired sessions, or resets reports and sessions. |
 
-## Data Entities & Relationships
-- patients: id, name, gender, birthdate, role
-- patient_medications: id, patient_id, medication_id, start_date, end_date
-- symptom_report: id, owner_id, timestamp
-- symptom_report_symptoms: id, symptom_id, severity
-- symptom_report_medications: id, medication_id
-- medications: id, name, manufacturer
-- symptoms: id, term
-- ticket: id, time_stamp, patient_id, symptom_report_ids, severity, status
+## Data model and request flow
 
-Each patient owns multiple symptom logs and medications. Each symptom log references one or more medications and symptoms. Each ticket owns one symptom report. The patient medications end_date attribute tracks medication duration. Role-based access is enforced at the backend layer.
+The current SQLite schema has three tables:
 
-## Authentication, Authorization, Secrets, & Persistent Data
-Authentication relies on lightweight JSON Web Tokens (JWT) generated after validating pre-seeded synthetic credentials for patients and doctors. Authorization is strictly enforced using role-based access control (RBAC) at the backend layer. The Auth Service validates all credentials against pre-seeded user records and issues JWTs for authenticated sessions. The React Client stores tokens in secure, httpOnly cookies and includes them in all API requests. The Python Backend verifies token validity before processing requests, ensuring only authenticated and authorized users can access patient records and create tickets.
+- `users`: unique normalized email, Argon2 password hash, role (`patient` or
+  `doctor`), and optional patient ID.
+- `user_sessions`: hashed session token, user ID, and expiration timestamp.
+- `symptom_reports`: patient ID, submission time, JSON symptom list, patient
+  notes, review status, and clinician review notes.
 
-## Decisions & Tradeoffs
-SQLite was chosen to ensure zero-configuration deployment and quick local setup, accepting the tradeoff that write concurrency is limited under heavy loads. The team opted to pre-load a normalized subset of the OpenFDA dataset to avoid external API dependencies during development. JWT authentication was selected for its stateless nature, making it ideal for a lightweight local deployment without requiring a separate session store.
+There is one configured demo patient ID. Patient and doctor accounts are
+created if missing during application startup. The profile endpoint returns
+the signed-in account email and patient ID; fabricated demographics and a
+care-team directory are not part of the current data model. Reports submitted
+by the patient are persisted in SQLite and appear in the patient history and
+the clinician dashboard. Clinicians can save review status and notes through
+the protected review endpoint; patient responses omit clinician-only notes.
+
+`src/routes/database.py:init_db()` creates missing tables and adds supported
+report columns to older databases. This is lightweight, idempotent schema
+initialization, not a versioned Alembic migration history. Review
+[deployment and testing](./04-delivery-plan.md#testing-deployment-and-release-plan) before upgrading or
+deploying a database.
+
+## Authentication and authorization
+
+Login credentials are checked against user records. Passwords are stored as
+Argon2 hashes. Successful login creates a random session token; the browser
+receives it as an HttpOnly, SameSite=Lax cookie, and SQLite stores only its
+SHA-256 hash and expiration. Patient routes require a patient role and access
+to the configured demo patient. Clinician routes require a doctor role.
+
+The current cookie is configured with `secure=False` for local HTTP
+development. Fixed demo accounts are seeded at startup. These are demo-only
+choices and are not safe defaults for an internet-facing deployment; see the
+deployment readiness notes in [04-delivery-plan.md](./04-delivery-plan.md#testing-deployment-and-release-plan).
+
+## Runtime and deployment shape
+
+- **Development:** Vite runs the React client, FastAPI runs on port 8000, and
+  Vite proxies `/api` requests to FastAPI.
+- **Built local demo:** `npm run build` writes the frontend into `src/public/`;
+  FastAPI serves the UI and API on the same origin.
+- **Database:** SQLite is a local file, defaulting to `src/data/healthwatch.db`;
+  `HEALTHWATCH_DB_PATH` can select another path. The file's parent directory
+  must exist and be writable.
+- **CI:** GitHub Actions runs backend tests plus frontend lint and build on
+  pushes and pull requests to `main`. It does not deploy the application.
+- **External integrations:** No EHR, OpenFDA, hosted database, cloud resource,
+  notification provider, or deployment pipeline is currently wired into this
+  application.
+
+SQLite keeps local setup simple but is intended here for a single-instance
+demo, not high-concurrency or multi-instance production operation. This
+application is a synthetic-data course demo and is not certified or suitable
+for real patient information or clinical use.
