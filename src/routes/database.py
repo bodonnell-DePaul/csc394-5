@@ -1,4 +1,5 @@
 import json
+import logging
 import sqlite3
 import hashlib
 from contextlib import closing
@@ -6,6 +7,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..config import DB_PATH, PATIENT_PROFILE
+
+logger = logging.getLogger("uvicorn.error")
 
 
 def get_connection() -> sqlite3.Connection:
@@ -55,6 +58,7 @@ def init_db() -> None:
             )
         """)
         conn.commit()
+    logger.info("Database operation completed: initialize schema")
 
 
 def save_symptom_report(
@@ -76,6 +80,7 @@ def save_symptom_report(
         conn.commit()
         report_id = cursor.lastrowid
 
+    logger.info("Database operation completed: save symptom report")
     return {
         "id": report_id,
         "patient_id": patient_id,
@@ -113,7 +118,9 @@ def list_symptom_reports(patient_id: str, limit: int, offset: int) -> tuple[list
         for row in rows
     ]
 
-    return reports, total_row["total"] if total_row else 0
+    total = total_row["total"] if total_row else 0
+    logger.info("Database operation completed: list symptom reports")
+    return reports, total
 
 
 def clear_symptom_reports(patient_id: str | None = None) -> int:
@@ -123,7 +130,12 @@ def clear_symptom_reports(patient_id: str | None = None) -> int:
         else:
             cursor = conn.execute("DELETE FROM symptom_reports WHERE patient_id = ?", (patient_id,))
         conn.commit()
-        return cursor.rowcount
+        deleted_rows = cursor.rowcount
+    logger.info(
+        "Database operation completed: clear symptom reports (%d rows deleted)",
+        deleted_rows,
+    )
+    return deleted_rows
 
 
 def get_patient_profile(patient_id: str) -> dict[str, Any]:
@@ -156,6 +168,7 @@ def get_report_summary(patient_id: str) -> dict[str, Any]:
         for name, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:5]
     ]
 
+    logger.info("Database operation completed: get report summary")
     return {
         "patient_id": patient_id,
         "total_reports": total,
