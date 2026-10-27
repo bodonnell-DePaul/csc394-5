@@ -12,8 +12,7 @@ class SymptomReportRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=1000)
     medication_name: str = Field(..., min_length=1)
     dosage_value: float = Field(..., gt=0, description="Dosage must be greater than 0")
-    dosage_unit: str = Field(..., regex="^(mg|mcg|ml|g|tablets)$")
-
+    dosage_unit: str = Field(..., pattern="^(mg|mcg|ml|g|tablets)$")
     @field_validator("symptoms")
     @classmethod
     def validate_symptoms(cls, value: list[str]) -> list[str]:
