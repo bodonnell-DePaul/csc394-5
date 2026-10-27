@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 from pydantic_core import PydanticCustomError
 
-from ..config import AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID
+from ..config import AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID, SAFE_DOSE_RANGES
 
 
 class SymptomReportRequest(BaseModel):
@@ -60,3 +60,26 @@ class DoctorReviewUpdate(BaseModel):
     @classmethod
     def clean_doctor_note(cls, value: str) -> str:
         return value.strip()
+
+class DosageUpdateRequest(BaseModel):
+    patient_id: str= FIXED_PATIENT_ID
+    medication_name: str = Field(..., min_length=1)
+    dosage_value: float = Field(..., gt=0, description="Dosage must be greater than 0")
+    dosage_unit: str
+
+    @field_validator("medication_name")
+    @classmethod
+    def clean_medication(cls, value:str) ->
+    return value.strip().lower()
+    @model_validator(mode="after")
+    def check_safe_range(self):
+        limits = SAFE_DOSE_RANGES.get(self.medication_name, {}).get(self.dosage_unit)
+        if limits is None:
+            return self  # unknown medication or unit: no range to check
+        low, high = limits
+        if not low <= self.dosage_value <= high:
+            raise ValueError(
+                f"{self.dosage_value} {self.dosage_unit} is outside the safe range "
+                f"for {self.medication_name} ({low}-{high} {self.dosage_unit})."
+            )
+        return self

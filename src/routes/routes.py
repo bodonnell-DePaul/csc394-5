@@ -11,8 +11,9 @@ from .database import (
     list_symptom_reports,
     save_symptom_report,
     update_report_review,
+    update_prescription_dosage
 )
-from ..middleware.schemas import DoctorReviewUpdate, SymptomReportRequest
+from ..middleware.schemas import DoctorReviewUpdate, SymptomReportRequest, DosageUpdateRequest
 
 router = APIRouter()
 
@@ -179,3 +180,14 @@ def review_symptom_report(
             detail="Symptom report not found.",
         )
     return {"message": "Review saved.", "report": report}
+
+@router.put("api/prescription/dosage", status_code=status.HTTP_200_OK)
+def modify_prescription_dosages(payload:DosageUpdateRequest)-> dict[str, object]:
+   require_demo_patient=payload.patient_id
+   
+    updated_record= update_prescription_dosage(patient_id=payload.patient_id, 
+    medication_name=payload.medication_name,
+    dosage_value=payload.dosage_value, 
+    dosage_unit=paylod.dosage_unit)
+
+    return{"success": True, "message": "Prescription dosages modified successfully", "data": updated_record}
