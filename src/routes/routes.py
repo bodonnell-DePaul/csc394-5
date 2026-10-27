@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status, Depends
 from fastapi.responses import FileResponse
+from from .auth import require_doctor_user, require_patient_user 
 
 from ..config import AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID, STATIC_DIR
 from .database import (
@@ -12,7 +13,7 @@ from .database import (
     update_report_review,
     update_prescription_dosage
 )
-from ..middleware.schemas import DoctorReviewUpdate, SymptomReportRequest, DosageUpdateRequest
+from ..middleware.schemas import DoctorReviewUpdate, SymptomReportRequest, DosageUpdateRequest, MedicationRemoveRequest
 
 router = APIRouter()
 
@@ -136,3 +137,17 @@ def modify_prescription_dosages(payload:DosageUpdateRequest)-> dict[str, object]
     dosage_unit=paylod.dosage_unit)
 
     return{"success": True, "message": "Prescription dosages modified successfully", "data": updated_record}
+
+@router.delete("/api/prescription")
+def delete_prescription(
+    payload: MedicationRemoveRequest,
+    current_user: dict = Depends(require_doctor_user) 
+) -> dict[str, object]:
+    require_demo_patient(payload.patient_id)
+    deleted_count = remove_prescription(payload.patient_id, payload.medication_name)
+    if deleted_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Medication target not found on active prescription ledger."
+        )
+    return {"success": True, "message": f"Successfully removed {payload.medication_name}."}

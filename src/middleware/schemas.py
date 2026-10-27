@@ -80,3 +80,12 @@ class DosageUpdateRequest(BaseModel):
                 f"for {self.medication_name} ({low}-{high} {self.dosage_unit})."
             )
         return self
+
+class MedicationRemoveRequest(BaseModel) :
+    patient_id: str=FIXED_PATIENT_ID
+    medication_name: str=Field(..., min_length=1)  
+
+    @field_validator
+    @class_method
+    def clean_medication(cls, value:str)->
+     return value.strip().lower()
