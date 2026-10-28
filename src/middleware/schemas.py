@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
 from ..config import AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID, SAFE_DOSE_RANGES
@@ -75,7 +75,7 @@ class DosageUpdateRequest(BaseModel):
     def check_safe_range(self):
         limits = SAFE_DOSE_RANGES.get(self.medication_name, {}).get(self.dosage_unit)
         if limits is None:
-            return self  # unknown medication or unit: no range to check
+            return self  
         low, high = limits
         if not low <= self.dosage_value <= high:
             raise ValueError(
@@ -90,5 +90,8 @@ class MedicationRemoveRequest(BaseModel) :
 
     @field_validator
     @class_method
-    def clean_medication(cls, value:str)->
-     return value.strip().lower()
+    def clean_medication(cls, value:str)->str:
+         return value.strip().lower()
+        
+        
+    
