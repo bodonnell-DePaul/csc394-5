@@ -23,4 +23,4 @@ AVAILABLE_SYMPTOMS = [
     "Tremor",
     "Vomiting",
 ]
-SAFE_DOSE_RANGES={"warfarin"= {"mg": (1, 10)}}
+SAFE_DOSE_RANGES = {"warfarin": {"mg": (1, 10)}}
