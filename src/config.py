@@ -23,3 +23,4 @@ AVAILABLE_SYMPTOMS = [
     "Tremor",
     "Vomiting",
 ]
+SAFE_DOSE_RANGES=[]

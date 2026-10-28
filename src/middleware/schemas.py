@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 from pydantic_core import PydanticCustomError
 
-from ..config import AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID
+from ..config import AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID, SAFE_DOSE_RANGES
 
 
 class SymptomReportRequest(BaseModel):
@@ -60,8 +60,6 @@ class DoctorReviewUpdate(BaseModel):
     @classmethod
     def clean_doctor_note(cls, value: str) -> str:
         return value.strip()
-<<<<<<< HEAD
-=======
 
 class DosageUpdateRequest(BaseModel):
     patient_id: str= FIXED_PATIENT_ID
@@ -94,4 +92,3 @@ class MedicationRemoveRequest(BaseModel) :
     @class_method
     def clean_medication(cls, value:str)->
      return value.strip().lower()
->>>>>>> jelena-prog-patch-1
