@@ -213,7 +213,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .primary-link:hover, .report-submit button:hover { color: white; background: var(--teal-dark); transform: translateY(-1px); }
 .primary-link span { font-size: 18px; font-weight: 400; }
 
-.summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; margin-bottom: 22px; }
+.summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; margin-bottom: 22px; }
 .summary-card {
   display: flex;
   min-width: 0;
@@ -237,11 +237,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 .summary-icon.teal { color: #23857e; background: #e3f3ef; }
 .summary-icon.blue { color: #4a80a8; background: #e9f2f8; }
-.summary-icon.lavender { color: #8374a9; background: #f0eef8; font-size: 23px; }
 .summary-card > div { display: grid; min-width: 0; gap: 3px; }
 .summary-label { color: #728392; font-size: 12px; font-weight: 600; }
 .summary-card strong { color: #20394a; font-family: Manrope, 'Segoe UI', sans-serif; font-size: 25px; line-height: 1.35; }
-.summary-card strong.care-name { overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
 .summary-note { color: #98a4ae; font-size: 11px; line-height: 1.45; }
 
 .portal-columns { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(320px, .95fr); align-items: start; gap: 18px; }
@@ -505,8 +503,6 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   .nav-icon { font-size: 16px; }
   .topbar { min-height: 58px; padding: 0 20px; }
   .portal-content { padding: 28px 20px 20px; }
-  .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .care-card { grid-column: 1 / -1; min-height: 100px; }
   .grid { grid-template-columns: 1fr; }
   .dashboard-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .doctor-content { padding: 28px 20px; }
@@ -524,7 +520,6 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   .summary-card { min-height: 112px; gap: 10px; padding: 14px 12px; }
   .summary-icon { flex-basis: 34px; width: 34px; height: 34px; font-size: 17px; }
   .summary-card strong { font-size: 22px; }
-  .summary-card strong.care-name { font-size: 14px; }
   .panel { padding: 18px 15px; }
   .section-heading h2 { font-size: 17px; }
   .report-submit { align-items: flex-start; flex-direction: column; }
