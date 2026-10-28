@@ -98,9 +98,6 @@ GitHub runs it automatically:
    job runs; there is no hosted URL or deployed environment produced by this
    workflow.
 
-The workflow needs no deployment secrets. It uses GitHub-hosted Ubuntu
-runners, installs dependencies from `requirements-dev.txt` and
-`package-lock.json`, then runs:
 
 ## Local database maintenance
 
