@@ -150,6 +150,5 @@ requests return 401, and role or patient access violations return 403.
 - `src/middleware/`: request schemas and error handling
 - `src/manage_demo_data.py`: database status, migrate, seed, clean, and reset
 - `src/data/healthwatch.db`: default local SQLite database
-- `src/public/`: built frontend served by FastAPI
 - `week3-api-documentation/02-architecture.md`: architecture diagram and
   component responsibilities
