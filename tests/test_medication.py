@@ -1,5 +1,3 @@
-import logging
-import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
@@ -11,7 +9,7 @@ from pydantic import ValidationError
 
 from src.config import FIXED_PATIENT_ID
 from src.middleware.schemas import DosageUpdateRequest
-from src.routes import database, routes
+from src.routes import database
 from src.routes.auth import password_hasher
 from src.server.main import create_app
 
@@ -200,6 +198,81 @@ class MedicationRouteTests(unittest.TestCase):
             json={"email": email, "password": password},
         )
         self.assertEqual(response.status_code, 200)
+
+    def test_symptom_report_snapshots_active_prescriptions_at_submission(self):
+        database.update_prescription_dosage(
+            FIXED_PATIENT_ID, "warfarin", 3, "mg"
+        )
+        database.update_prescription_dosage(
+            FIXED_PATIENT_ID, "aspirin", 81, "mg"
+        )
+        database.deactivate_prescription(FIXED_PATIENT_ID, "aspirin")
+
+        response = self.client.post(
+            "/api/symptom_report",
+            json={"symptoms": ["Nausea"]},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        report = response.json()["report"]
+        self.assertEqual(
+            report["prescription_snapshot"],
+            [
+                {
+                    "medication_name": "warfarin",
+                    "dosage_value": 3,
+                    "dosage_unit": "mg",
+                }
+            ],
+        )
+
+        listed = self.client.get("/api/symptom_report").json()["reports"]
+        self.assertEqual(len(listed), 1)
+        self.assertEqual(
+            listed[0]["prescription_snapshot"],
+            report["prescription_snapshot"],
+        )
+
+    def test_prescription_snapshot_is_immutable_after_medication_is_deactivated(self):
+        database.update_prescription_dosage(
+            FIXED_PATIENT_ID, "warfarin", 3, "mg"
+        )
+
+        first_response = self.client.post(
+            "/api/symptom_report",
+            json={"symptoms": ["Nausea"]},
+        )
+        self.assertEqual(first_response.status_code, 201)
+
+        database.deactivate_prescription(FIXED_PATIENT_ID, "warfarin")
+        second_response = self.client.post(
+            "/api/symptom_report",
+            json={"symptoms": ["Headache"]},
+        )
+
+        self.assertEqual(second_response.status_code, 201)
+        first_snapshot = first_response.json()["report"]["prescription_snapshot"]
+        second_snapshot = second_response.json()["report"]["prescription_snapshot"]
+        self.assertEqual(
+            first_snapshot,
+            [
+                {
+                    "medication_name": "warfarin",
+                    "dosage_value": 3,
+                    "dosage_unit": "mg",
+                }
+            ],
+        )
+        self.assertEqual(second_snapshot, [])
+
+        listed = self.client.get("/api/symptom_report").json()["reports"]
+        self.assertEqual(
+            {report["id"]: report["prescription_snapshot"] for report in listed},
+            {
+                first_response.json()["report"]["id"]: first_snapshot,
+                second_response.json()["report"]["id"]: [],
+            },
+        )
 
     def test_doctor_can_mark_prescription_inactive_without_deleting_it(self):
         database.update_prescription_dosage(

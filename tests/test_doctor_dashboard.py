@@ -125,6 +125,7 @@ class DoctorDashboardTests(unittest.TestCase):
         third = database.save_symptom_report(
             FIXED_PATIENT_ID, ["Fatigue"], "Third patient note"
         )
+        self.assertEqual(second["prescription_snapshot"], [])
         database.update_report_review(
             second["id"], FIXED_PATIENT_ID, "reviewed", "Check in tomorrow"
         )

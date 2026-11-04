@@ -238,11 +238,19 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(create_body["message"], "Symptom report saved.")
         self.assertEqual(
             set(create_body["report"]),
-            {"id", "patient_id", "submitted_at", "symptoms", "notes"},
+            {
+                "id",
+                "patient_id",
+                "submitted_at",
+                "symptoms",
+                "notes",
+                "prescription_snapshot",
+            },
         )
         self.assertEqual(create_body["report"]["patient_id"], FIXED_PATIENT_ID)
         self.assertEqual(create_body["report"]["symptoms"], ["Nausea", "Headache"])
         self.assertEqual(create_body["report"]["notes"], "Call after lunch")
+        self.assertEqual(create_body["report"]["prescription_snapshot"], [])
 
         list_response = self.client.get(
             "/api/symptom_report",
