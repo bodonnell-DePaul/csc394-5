@@ -158,6 +158,45 @@ class MedicationDatabaseTests(unittest.TestCase):
             [("patient-a", "warfarin", 2, 0), ("patient-b", "warfarin", 4, 1)],
         )
 
+    def test_list_prescriptions_returns_patient_scoped_pagination_including_inactive(self):
+        database.update_prescription_dosage("patient-a", "warfarin", 2, "mg")
+        database.update_prescription_dosage("patient-a", "aspirin", 81, "mg")
+        database.update_prescription_dosage("patient-b", "warfarin", 4, "mg")
+        database.deactivate_prescription("patient-a", "aspirin")
+
+        prescriptions, total = database.list_prescriptions(
+            "patient-a", limit=1, offset=0
+        )
+        next_page, next_total = database.list_prescriptions(
+            "patient-a", limit=1, offset=1
+        )
+        empty_page, empty_total = database.list_prescriptions(
+            "patient-a", limit=1, offset=2
+        )
+
+        self.assertEqual(total, 2)
+        self.assertEqual(next_total, 2)
+        self.assertEqual(empty_total, 2)
+        self.assertEqual(len(prescriptions), 1)
+        self.assertEqual(len(next_page), 1)
+        self.assertEqual(empty_page, [])
+        self.assertEqual(prescriptions[0]["patient_id"], "patient-a")
+        self.assertEqual(prescriptions[0]["medication_name"], "warfarin")
+        self.assertEqual(prescriptions[0]["dosage_value"], 2)
+        self.assertEqual(prescriptions[0]["dosage_unit"], "mg")
+        self.assertEqual(prescriptions[0]["is_active"], 1)
+        self.assertEqual(next_page[0]["medication_name"], "aspirin")
+        self.assertEqual(next_page[0]["is_active"], 0)
+        self.assertTrue(prescriptions[0]["updated_at"])
+
+    def test_list_prescriptions_returns_empty_collection_for_patient_without_prescriptions(self):
+        prescriptions, total = database.list_prescriptions(
+            "patient-without-prescriptions", limit=20, offset=0
+        )
+
+        self.assertEqual(prescriptions, [])
+        self.assertEqual(total, 0)
+
 
 class MedicationRouteTests(unittest.TestCase):
     def setUp(self):
@@ -198,6 +237,58 @@ class MedicationRouteTests(unittest.TestCase):
             json={"email": email, "password": password},
         )
         self.assertEqual(response.status_code, 200)
+
+    def test_patient_can_get_own_prescriptions_with_pagination(self):
+        database.update_prescription_dosage(
+            FIXED_PATIENT_ID, "warfarin", 3, "mg"
+        )
+        database.update_prescription_dosage(
+            FIXED_PATIENT_ID, "aspirin", 81, "mg"
+        )
+        database.update_prescription_dosage("patient-b", "warfarin", 4, "mg")
+        database.deactivate_prescription(FIXED_PATIENT_ID, "aspirin")
+
+        response = self.client.get(
+            "/api/medication",
+            params={"limit": 1, "offset": 1},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(set(body), {"medications", "page"})
+        self.assertEqual(
+            body["page"],
+            {"limit": 1, "offset": 1, "total": 2},
+        )
+        self.assertEqual(len(body["medications"]), 1)
+        self.assertEqual(
+            body["medications"][0]["patient_id"], FIXED_PATIENT_ID
+        )
+        self.assertEqual(body["medications"][0]["medication_name"], "aspirin")
+        self.assertEqual(body["medications"][0]["is_active"], 0)
+
+    def test_patient_cannot_get_another_patients_prescriptions(self):
+        database.update_prescription_dosage("patient-b", "warfarin", 4, "mg")
+
+        response = self.client.get(
+            "/api/medication",
+            params={"patient_id": "patient-b"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json(), {"detail": "Cannot access another patient's medications."})
+
+    def test_get_prescriptions_requires_auth_and_valid_pagination(self):
+        self.client.post("/api/auth/logout")
+
+        unauthenticated = self.client.get("/api/medication")
+        self.assertEqual(unauthenticated.status_code, 401)
+
+        self.login("patient")
+        for params in ({"limit": 0}, {"limit": 101}, {"offset": -1}):
+            with self.subTest(params=params):
+                response = self.client.get("/api/medication", params=params)
+                self.assertEqual(response.status_code, 422)
 
     def test_symptom_report_snapshots_active_prescriptions_at_submission(self):
         database.update_prescription_dosage(
