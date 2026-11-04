@@ -278,17 +278,19 @@ class MedicationRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json(), {"detail": "Cannot access another patient's medications."})
 
-    def test_get_prescriptions_requires_auth_and_valid_pagination(self):
+    def test_get_prescriptions_requires_authentication(self):
         self.client.post("/api/auth/logout")
 
         unauthenticated = self.client.get("/api/medication")
         self.assertEqual(unauthenticated.status_code, 401)
 
+    def test_invalid_pagination_returns_validation_error(self):
         self.login("patient")
         for params in ({"limit": 0}, {"limit": 101}, {"offset": -1}):
             with self.subTest(params=params):
                 response = self.client.get("/api/medication", params=params)
                 self.assertEqual(response.status_code, 422)
+                self.assertEqual(set(response.json()), {"detail"})
 
     def test_symptom_report_snapshots_active_prescriptions_at_submission(self):
         database.update_prescription_dosage(
