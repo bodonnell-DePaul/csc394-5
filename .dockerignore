@@ -1,0 +1,17 @@
+.git/
+.venv/
+node_modules/
+**/node_modules/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+src/public/
+src/data/*.db*
+src/data/*.db*
+src/data/*.sqlite*
+tests/
+week3-api-documentation/
+*.pptx

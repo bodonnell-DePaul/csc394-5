@@ -49,10 +49,27 @@ For this course project, the EHR data is seeded by the team. Healthwatch will no
   
 ## Testing, deployment, and release plan
 
-The current supported deployment is a local, single-instance demo. The
-repository does not currently configure a cloud host, container image,
-infrastructure-as-code, CI/CD pipeline, TLS termination, or managed database.
-Do not expose the demo publicly or use it with real health information.
+The local supported setup remains a single-instance demo. The repository also
+provides a Render Blueprint and Docker image for an automated, single-instance
+cloud demo deployment. Render provides HTTPS termination; the service uses a
+persistent disk for SQLite and waits for GitHub checks before deploying. This
+does not make the app production-ready. Use synthetic data only and never
+enter real health information.
+
+### Render demo deployment
+
+The root `render.yaml` describes the web service, Docker build, `main` branch,
+`/health` check, persistent disk mounted at `/var/data`, SQLite path, and
+secure session-cookie setting. To provision it, connect the GitHub repository
+to Render and create a Blueprint from `render.yaml`. The disk requires a paid
+web-service plan. Once created, Render deploys commits to `main` only after
+the GitHub Actions checks pass; backend tests and frontend lint/build remain
+defined in `.github/workflows/ci.yml`. Verify the deployed service at
+`/health`.
+
+The disk retains SQLite data through deploys and restarts but is not a backup.
+The fixed demo credentials remain available, and SQLite is intended for one
+demo instance. Do not use this deployment for real patient data.
 
 ### Environment requirements
 
@@ -63,6 +80,7 @@ Do not expose the demo publicly or use it with real health information.
 | Python dependencies | `requirements.txt` for runtime. `requirements-dev.txt` includes runtime plus `httpx`, mypy, and Ruff. |
 | Storage | Writable directory for SQLite. Defaults to `src/data/healthwatch.db`; override with `HEALTHWATCH_DB_PATH`. |
 | Ports | FastAPI: `127.0.0.1:8000`. Vite: port `5173`, with `/api` proxied to port 8000. |
+| Session cookie | `HEALTHWATCH_COOKIE_SECURE` defaults to `false` locally; set it to `true` for HTTPS. |
 
 No separate database server, API key, or external service is required for the
 local demo.
@@ -164,14 +182,13 @@ Schema upgrades are idempotent initialization code, not a versioned migration
 history. Introduce reviewed, versioned migrations if schema evolution or
 deployed database upgrades become more complex.
 
-The app is not production-ready. Before internet-facing deployment, remove
-fixed demo credentials and startup account creation; require HTTPS and secure
-session cookies; review CSRF, session, proxy, and secret-management behavior;
-replace fixed-patient demo assumptions; complete security, privacy, and
-clinical compliance reviews; select backed-up storage suitable for concurrent
-instances; and define platform-specific infrastructure, CI/CD, migrations,
-health checks, retention, recovery, and monitoring. Until then, use synthetic
-demo data only on a trusted local machine.
+The app is not production-ready. Before any real or clinical use, remove fixed
+demo credentials and startup account creation; review CSRF, session, proxy,
+and secret-management behavior; replace fixed-patient demo assumptions;
+complete security, privacy, and clinical compliance reviews; use a managed
+database and backed-up storage suitable for concurrent instances; and define
+migrations, retention, recovery, and monitoring. The Render demo is public;
+use synthetic demo data only.
 
 ## Risks
 | Risks | Fallback | Owner |

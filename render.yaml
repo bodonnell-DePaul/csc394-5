@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: healthwatch-demo
+    branch: main
+    runtime: docker
+    plan: "0.5c-512mb"
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: checksPass
+    healthCheckPath: /health
+    disk:
+      name: healthwatch-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: HEALTHWATCH_DB_PATH
+        value: /var/data/healthwatch.db
+      - key: HEALTHWATCH_COOKIE_SECURE
+        value: "true"
