@@ -22,6 +22,6 @@ RUN python -m pip install --no-cache-dir -r requirements.txt
 COPY src ./src
 COPY --from=frontend-build /app/src/public ./src/public
 
-EXPOSE 8000
+EXPOSE 10000
 
 CMD ["sh", "-c", "exec uvicorn src.server.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
