@@ -303,6 +303,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .field-hint { display: block; margin-top: 7px; color: #98a4ad; font-size: 10px; }
 .selected-symptoms { display: grid; gap: 7px; padding: 0; margin: 9px 0 0; list-style: none; }
 .selected-symptom { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 10px; background: #f3f8f7; border: 1px solid #e4efed; border-radius: 7px; font-size: 12px; }
+.selected-symptom-card { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 12px; background: #f3f8f7; border: 1px solid #e4efed; border-radius: 7px; font-size: 12px; }
+.selected-symptom-card label { grid-column: 1 / -1; color: #627385; }
+.selected-symptom-card input[type="range"],
+.selected-symptom-card input[type="text"] { grid-column: 1 / -1; width: 100%; }
+.medication-badge { padding: 3px 8px; color: #356d6b; background: #eaf5f3; border-radius: 999px; font-size: 10px; }
 .report-submit { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .report-submit button { min-height: 42px; padding: 0 15px; font-size: 12px; }
 .report-submit button span { font-size: 17px; font-weight: 400; }

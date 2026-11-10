@@ -2,8 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
-async function requestJson(url, options) {
-  const response = await fetch(url, options);
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: 'same-origin',
+    ...options,
+  });
   const result = await response.json();
 
   if (!response.ok) {
@@ -78,6 +81,8 @@ function PatientDashboard({ user, onLogout }) {
   const [symptoms, setSymptoms] = useState([]);
   const [symptomChoice, setSymptomChoice] = useState('');
   const [selectedSymptoms, setSelectedSymptoms] = useState([]);
+  const [medications, setMedications] = useState([]);
+  const [selectedMedication, setSelectedMedication] = useState('');
   const [reports, setReports] = useState([]);
   const [reportTotal, setReportTotal] = useState(0);
   const [reportSearch, setReportSearch] = useState('');
@@ -119,12 +124,19 @@ function PatientDashboard({ user, onLogout }) {
 
     async function loadDemo() {
       try {
-        const [patientResult, symptomsResult, reportResult, summaryResult] =
+        const [
+          patientResult,
+          symptomsResult,
+          reportResult,
+          summaryResult,
+          medicationResult,
+        ] =
           await Promise.all([
             requestJson('/api/patient'),
             requestJson('/api/symptoms'),
             requestJson('/api/symptom_report?limit=20&offset=0'),
             requestJson('/api/symptom_report/summary'),
+            requestJson('/api/medications/'),
           ]);
 
         if (active) {
@@ -133,6 +145,7 @@ function PatientDashboard({ user, onLogout }) {
           setReports(reportResult.reports);
           setReportTotal(reportResult.page.total);
           setSummary(summaryResult.summary);
+          setMedications(medicationResult.medications);
         }
       } catch (error) {
         if (active) {
@@ -170,6 +183,20 @@ function PatientDashboard({ user, onLogout }) {
     }
   }
 
+  function updateSymptomDetail(index, key, value) {
+    setSelectedSymptoms((current) =>
+      current.map((symptom, symptomIndex) =>
+        symptomIndex === index ? { ...symptom, [key]: value } : symptom
+      )
+    );
+  }
+
+  function removeSymptom(index) {
+    setSelectedSymptoms((current) =>
+      current.filter((_, symptomIndex) => symptomIndex !== index)
+    );
+  }
+
   async function submitReport(event) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -192,12 +219,14 @@ function PatientDashboard({ user, onLogout }) {
         body: JSON.stringify({
           symptoms: selectedSymptoms,
           notes: formData.get('notes'),
+          associated_medication: selectedMedication || null,
         }),
       });
 
       form.reset();
       setSymptomChoice('');
       setSelectedSymptoms([]);
+      setSelectedMedication('');
       setSubmissionNotice({
         title: 'Report submitted',
         message: 'Your symptom report was saved successfully.',
@@ -233,8 +262,13 @@ function PatientDashboard({ user, onLogout }) {
   const visibleReports = reports.filter((report) => {
     const query = reportSearch.trim().toLowerCase();
     return !query
-      || report.symptoms.some((symptom) => symptom.toLowerCase().includes(query))
-      || report.notes.toLowerCase().includes(query);
+      || report.symptoms.some((symptom) => {
+        const name = typeof symptom === 'object' ? symptom.name : symptom;
+        return name?.toLowerCase().includes(query);
+      })
+      || (report.associated_medication
+        && report.associated_medication.toLowerCase().includes(query))
+      || (report.notes || '').toLowerCase().includes(query);
   });
 
   function renderReport(report) {
@@ -245,9 +279,21 @@ function PatientDashboard({ user, onLogout }) {
           <time className="meta" dateTime={report.submitted_at}>
             {new Date(report.submitted_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
           </time>
+          {report.associated_medication && (
+            <span className="medication-badge">Med: {report.associated_medication}</span>
+          )}
         </div>
         <div className="pill-list">
-          {report.symptoms.map((symptom) => <span className="pill" key={symptom}>{symptom}</span>)}
+          {report.symptoms.map((symptom, index) => {
+            const isObject = typeof symptom === 'object';
+            const name = isObject ? symptom.name : symptom;
+            return (
+              <span className="pill" key={`${name}-${index}`}>
+                {name}
+                {isObject && ` (Severity: ${symptom.severity}/10${symptom.location ? ` • Loc: ${symptom.location}` : ''})`}
+              </span>
+            );
+          })}
         </div>
         {report.notes && <p className="report-notes">{report.notes}</p>}
       </article>
@@ -370,8 +416,11 @@ function PatientDashboard({ user, onLogout }) {
                     onChange={(event) => {
                       const symptom = event.target.value;
                       setSymptomChoice('');
-                      if (symptom && !selectedSymptoms.includes(symptom)) {
-                        setSelectedSymptoms([...selectedSymptoms, symptom]);
+                      if (symptom && !selectedSymptoms.some((item) => item.name === symptom)) {
+                        setSelectedSymptoms([
+                          ...selectedSymptoms,
+                          { name: symptom, severity: 5, location: '' },
+                        ]);
                       }
                     }}
                   >
@@ -381,21 +430,69 @@ function PatientDashboard({ user, onLogout }) {
                     ))}
                   </select>
                   {selectedSymptoms.length > 0 && (
-                    <ul className="selected-symptoms" aria-label="Selected symptoms">
-                      {selectedSymptoms.map((symptom) => (
-                        <li className="selected-symptom" key={symptom}>
-                          <span>{symptom}</span>
-                          <button
-                            type="button"
-                            className="remove-symptom"
-                            aria-label={`Remove ${symptom}`}
-                            onClick={() => setSelectedSymptoms(selectedSymptoms.filter((item) => item !== symptom))}
-                          >Remove</button>
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="selected-symptoms-management">
+                      <span className="field-hint">Set the severity and location for each symptom.</span>
+                      <ul className="selected-symptoms" aria-label="Selected symptoms">
+                        {selectedSymptoms.map((symptom, index) => (
+                          <li className="selected-symptom-card" key={symptom.name}>
+                            <strong>{symptom.name}</strong>
+                            <button
+                              type="button"
+                              className="remove-symptom"
+                              aria-label={`Remove ${symptom.name}`}
+                              onClick={() => removeSymptom(index)}
+                            >Remove</button>
+                            <label htmlFor={`severity-${index}`}>
+                              Severity: {symptom.severity}/10
+                            </label>
+                            <input
+                              id={`severity-${index}`}
+                              type="range"
+                              min="1"
+                              max="10"
+                              value={symptom.severity}
+                              onChange={(event) => updateSymptomDetail(
+                                index,
+                                'severity',
+                                Number(event.target.value),
+                              )}
+                            />
+                            <label htmlFor={`location-${index}`}>
+                              Location (optional)
+                            </label>
+                            <input
+                              id={`location-${index}`}
+                              type="text"
+                              maxLength="200"
+                              value={symptom.location}
+                              onChange={(event) => updateSymptomDetail(
+                                index,
+                                'location',
+                                event.target.value,
+                              )}
+                              placeholder="e.g., lower back"
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
                   <span className="field-hint">Add as many as you need.</span>
+                </div>
+                <div className="field">
+                  <label className="field-label" htmlFor="medication-select">
+                    Associated medication <span>(optional)</span>
+                  </label>
+                  <select
+                    id="medication-select"
+                    value={selectedMedication}
+                    onChange={(event) => setSelectedMedication(event.target.value)}
+                  >
+                    <option value="">No associated medication</option>
+                    {medications.map((medication) => (
+                      <option key={medication} value={medication}>{medication}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="field">
                   <label className="field-label" htmlFor="report-notes">Anything else you’d like us to know? <span>(optional)</span></label>
@@ -434,10 +531,10 @@ function PatientDashboard({ user, onLogout }) {
                   <button type="button" className="refresh-button" onClick={() => refreshHistory().catch((error) => setStatus({ message: error.message, isError: true }))}>Refresh</button>
                 </div>
               </div>
-              <p className="section-description">Search reports by symptom or by details in the notes you shared.</p>
+              <p className="section-description">Search reports by symptom, medication, or details in the notes you shared.</p>
               <label className="search-field">
                 <span aria-hidden="true">⌕</span>
-                <input type="search" value={reportSearch} onChange={(event) => setReportSearch(event.target.value)} placeholder="Search symptoms or notes" aria-label="Search reports by symptom or notes" />
+                <input type="search" value={reportSearch} onChange={(event) => setReportSearch(event.target.value)} placeholder="Search symptoms, medications, or notes" aria-label="Search reports by symptom, medication, or notes" />
                 {reportSearch && <button type="button" onClick={() => setReportSearch('')} aria-label="Clear search">Clear</button>}
               </label>
               <p className="search-hint">Search the reports currently loaded. Load older reports to include earlier entries.</p>
@@ -606,8 +703,13 @@ function DoctorDashboard({ user, onLogout }) {
     const matchesStatus = filter === 'all' || report.review_status === filter;
     const query = search.trim().toLowerCase();
     const matchesSearch = !query
-      || report.symptoms.some((symptom) => symptom.toLowerCase().includes(query))
-      || report.notes.toLowerCase().includes(query)
+      || report.symptoms.some((symptom) => {
+        const name = typeof symptom === 'object' ? symptom.name : symptom;
+        return name?.toLowerCase().includes(query);
+      })
+      || (report.associated_medication
+        && report.associated_medication.toLowerCase().includes(query))
+      || (report.notes || '').toLowerCase().includes(query)
       || String(report.id).includes(query);
     return matchesStatus && matchesSearch;
   });
@@ -660,7 +762,21 @@ function DoctorDashboard({ user, onLogout }) {
               <div><strong>Report #{report.id}</strong><div className="meta">{new Date(report.submitted_at).toLocaleString()}</div></div>
               <span className={`review-badge ${report.review_status}`}>{report.review_status === 'reviewed' ? 'Reviewed' : 'Pending review'}</span>
             </div>
-            <div className="pill-list">{report.symptoms.map((symptom) => <span className="pill" key={symptom}>{symptom}</span>)}</div>
+            <div className="pill-list">
+              {report.symptoms.map((symptom, index) => {
+                const isObject = typeof symptom === 'object';
+                const name = isObject ? symptom.name : symptom;
+                return (
+                  <span className="pill" key={`${name}-${index}`}>
+                    {name}
+                    {isObject && ` (Severity: ${symptom.severity}/10${symptom.location ? ` • Loc: ${symptom.location}` : ''})`}
+                  </span>
+                );
+              })}
+            </div>
+            {report.associated_medication && (
+              <p><strong>Associated medication:</strong> {report.associated_medication}</p>
+            )}
             <p><strong>Patient notes:</strong> {report.notes || 'No additional details'}</p>
             <label className="field-label" htmlFor={`doctor-note-${report.id}`}>Doctor review notes</label>
             <textarea id={`doctor-note-${report.id}`} maxLength={1000} rows={3}

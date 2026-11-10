@@ -19,6 +19,7 @@
 | GET /api/symptom_report | patient's symptom reports; patientID, limit, offset| 200: symptom_report collection|
 | PATCH /api/medication | Doctor only; JSON body with `patient_id`, `medication_name`, and `active: false` to mark a prescription inactive. Inactive prescriptions cannot be reactivated or deleted. | 200: update confirmation; 401/403: authentication or role failure; 404: patient or active medication not found; 422: invalid request or reactivation attempt |
 | GET /api/medication | Patient only; optional `patient_id`, `limit` (1-100), and `offset` (0 or greater). Returns that patient's prescriptions, including inactive records. | 200: paginated medication collection; 401/403: authentication or patient-scope failure |
+| GET /api/medications/ | Returns the supported medication choices for symptom reports. | 200: `{"medications": [...]}` |
 
 example using synthetic data:
 ~~~
@@ -48,13 +49,19 @@ The vertical-slice demo implements only symptom reporting for one fixed syntheti
 
 `GET /api/symptoms` returns the symptom choices supported by the form.
 
-`POST /api/symptom_report` accepts `application/json` with exactly these fields:
+`POST /api/symptom_report` accepts `application/json` with symptom names as strings or structured symptom details. Structured details include a severity from 1 to 10 and an optional location. `associated_medication` is optional and must be one of the supported medication choices.
 
 ```json
 {
-  "patientID": "11111111-1111-2111-6111-111111111111",
-  "symptoms": ["Nausea", "Headache"]
+  "patient_id": "11111111-1111-2111-6111-111111111111",
+  "symptoms": [
+    {"name": "Headache", "severity": 7, "location": "left temple"},
+    "Nausea"
+  ],
+  "associated_medication": "Lexapro",
+  "notes": "Started this morning"
 }
+```
 
 
 ## Acceptance tests

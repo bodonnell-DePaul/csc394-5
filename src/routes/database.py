@@ -50,6 +50,10 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE symptom_reports ADD COLUMN prescription_snapshot_json TEXT NOT NULL DEFAULT '[]'"
             )
+        if "associated_medication" not in columns:
+            conn.execute(
+                "ALTER TABLE symptom_reports ADD COLUMN associated_medication TEXT DEFAULT NULL"
+            )
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -90,8 +94,9 @@ def init_db() -> None:
 
 def save_symptom_report(
     patient_id: str,
-    symptoms: list[str],
+    symptoms: list[str | dict[str, Any]],
     notes: str | None = None,
+    associated_medication: str | None = None,
 ) -> dict[str, Any]:
     submitted_at = datetime.now(timezone.utc).isoformat()
     saved_notes = notes or ""
@@ -118,9 +123,9 @@ def save_symptom_report(
             """
             INSERT INTO symptom_reports (
                 patient_id, submitted_at, symptoms_json, notes,
-                prescription_snapshot_json
+                prescription_snapshot_json, associated_medication
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 patient_id,
@@ -128,6 +133,7 @@ def save_symptom_report(
                 json.dumps(symptoms),
                 saved_notes,
                 json.dumps(prescription_snapshot),
+                associated_medication,
             ),
         )
         conn.commit()
@@ -141,6 +147,11 @@ def save_symptom_report(
         "symptoms": symptoms,
         "notes": saved_notes,
         "prescription_snapshot": prescription_snapshot,
+        **(
+            {"associated_medication": associated_medication}
+            if associated_medication is not None
+            else {}
+        ),
     }
 
 
@@ -158,7 +169,8 @@ def list_symptom_reports(
         rows = conn.execute(
             """
             SELECT id, patient_id, submitted_at, symptoms_json, notes,
-                   review_status, doctor_note, prescription_snapshot_json
+                   review_status, doctor_note, prescription_snapshot_json,
+                   associated_medication
             FROM symptom_reports
             WHERE patient_id = ?
             ORDER BY id DESC
@@ -177,6 +189,11 @@ def list_symptom_reports(
             "review_status": row["review_status"],
             "prescription_snapshot": json.loads(
                 row["prescription_snapshot_json"] or "[]"
+            ),
+            **(
+                {"associated_medication": row["associated_medication"]}
+                if row["associated_medication"] is not None
+                else {}
             ),
             **({"doctor_note": row["doctor_note"]} if include_doctor_notes else {}),
         }
@@ -230,13 +247,14 @@ def get_report_summary(patient_id: str) -> dict[str, Any]:
             (patient_id,),
         ).fetchall()
 
-    symptoms: list[str] = []
+    symptoms: list[str | dict[str, Any]] = []
     for row in rows:
         symptoms.extend(json.loads(row["symptoms_json"]))
 
     counts: dict[str, int] = {}
     for symptom in symptoms:
-        counts[symptom] = counts.get(symptom, 0) + 1
+        name = symptom["name"] if isinstance(symptom, dict) else symptom
+        counts[name] = counts.get(name, 0) + 1
 
     top_symptoms = [
         {"name": name, "count": count}
@@ -370,7 +388,8 @@ def update_report_review(
         row = conn.execute(
             """
             SELECT id, patient_id, submitted_at, symptoms_json, notes,
-                   review_status, doctor_note, prescription_snapshot_json
+                   review_status, doctor_note, prescription_snapshot_json,
+                   associated_medication
             FROM symptom_reports WHERE id = ? AND patient_id = ?
             """,
             (report_id, patient_id),
@@ -387,6 +406,11 @@ def update_report_review(
         "doctor_note": row["doctor_note"],
         "prescription_snapshot": json.loads(
             row["prescription_snapshot_json"] or "[]"
+        ),
+        **(
+            {"associated_medication": row["associated_medication"]}
+            if row["associated_medication"] is not None
+            else {}
         ),
     }
 

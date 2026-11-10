@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from src.config import AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID
+from src.config import AVAILABLE_MEDICATIONS, AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID
 from src.routes import database
 from src.routes.auth import password_hasher
 from src.routes import routes
@@ -53,6 +53,12 @@ class ApiIntegrationTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"symptoms": AVAILABLE_SYMPTOMS})
+
+    def test_available_medications_endpoint_returns_supported_choices(self):
+        response = self.client.get("/api/medications/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"medications": AVAILABLE_MEDICATIONS})
 
     def test_public_routes_return_expected_responses(self):
         index_response = self.client.get("/")
@@ -165,6 +171,63 @@ class ApiIntegrationTests(unittest.TestCase):
                 ],
             },
         )
+
+    def test_symptom_report_accepts_details_and_associated_medication(self):
+        database.update_prescription_dosage(
+            FIXED_PATIENT_ID, "warfarin", 3, "mg"
+        )
+        response = self.client.post(
+            "/api/symptom_report",
+            json={
+                "symptoms": [
+                    {
+                        "name": "Headache",
+                        "severity": 7,
+                        "location": "left temple",
+                    }
+                ],
+                "associated_medication": "lexapro",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        report = response.json()["report"]
+        self.assertEqual(
+            report["symptoms"],
+            [{"name": "Headache", "severity": 7, "location": "left temple"}],
+        )
+        self.assertEqual(report["associated_medication"], "Lexapro")
+        self.assertEqual(
+            report["prescription_snapshot"],
+            [
+                {
+                    "medication_name": "warfarin",
+                    "dosage_value": 3,
+                    "dosage_unit": "mg",
+                }
+            ],
+        )
+
+        listed = self.client.get("/api/symptom_report").json()["reports"]
+        self.assertEqual(listed[0]["associated_medication"], "Lexapro")
+        self.assertEqual(
+            listed[0]["prescription_snapshot"],
+            report["prescription_snapshot"],
+        )
+
+    def test_symptom_report_rejects_invalid_details_or_medication(self):
+        for payload in (
+            {
+                "symptoms": [{"name": "Headache", "severity": 11}],
+            },
+            {
+                "symptoms": ["Headache"],
+                "associated_medication": "not supported",
+            },
+        ):
+            with self.subTest(payload=payload):
+                response = self.client.post("/api/symptom_report", json=payload)
+                self.assertEqual(response.status_code, 422)
 
     def test_patient_profile_and_summary_reject_unknown_patient(self):
         profile = self.client.get("/api/patient", params={"patient_id": "unknown"})

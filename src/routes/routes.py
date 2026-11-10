@@ -3,7 +3,12 @@ from fastapi import APIRouter, HTTPException, Query, status, Depends
 from fastapi.responses import FileResponse
 from .auth import require_patient_user, require_doctor_user
 
-from ..config import AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID, STATIC_DIR
+from ..config import (
+    AVAILABLE_MEDICATIONS,
+    AVAILABLE_SYMPTOMS,
+    FIXED_PATIENT_ID,
+    STATIC_DIR,
+)
 from .database import (
     clear_symptom_reports,
     deactivate_prescription,
@@ -18,6 +23,7 @@ from .database import (
 from ..middleware.schemas import (
     DoctorReviewUpdate,
     MedicationStatusUpdateRequest,
+    SymptomDetail,
     SymptomReportRequest,
 )
 
@@ -61,6 +67,11 @@ def get_symptoms() -> dict[str, list[str]]:
     return {"symptoms": AVAILABLE_SYMPTOMS}
 
 
+@router.get("/api/medications/")
+def get_available_medications() -> dict[str, list[str]]:
+    return {"medications": AVAILABLE_MEDICATIONS}
+
+
 @router.get("/api/symptom_report/summary")
 def get_summary(
     patient_id: str = FIXED_PATIENT_ID,
@@ -85,8 +96,14 @@ def create_symptom_report(
 
     report = save_symptom_report(
         user["patient_id"],
-        payload.symptoms,
+        [
+            symptom.model_dump()
+            if isinstance(symptom, SymptomDetail)
+            else symptom
+            for symptom in payload.symptoms
+        ],
         payload.notes,
+        payload.associated_medication,
     )
 
     return {
