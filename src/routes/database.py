@@ -46,6 +46,10 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE symptom_reports ADD COLUMN doctor_note TEXT NOT NULL DEFAULT ''"
             )
+        if "prescription_snapshot_json" not in columns:
+            conn.execute(
+                "ALTER TABLE symptom_reports ADD COLUMN prescription_snapshot_json TEXT NOT NULL DEFAULT '[]'"
+            )
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -66,6 +70,20 @@ def init_db() -> None:
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS prescriptions (
+                patient_id TEXT NOT NULL,
+                medication_name TEXT NOT NULL,
+                dosage_value REAL NOT NULL CHECK (dosage_value > 0),
+                dosage_unit TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1
+                    CHECK (is_active IN (0, 1)),
+                PRIMARY KEY (patient_id, medication_name)
+            )
+            """
+        )
         conn.commit()
     logger.info("Database operation completed: initialize schema")
 
@@ -79,12 +97,38 @@ def save_symptom_report(
     saved_notes = notes or ""
 
     with closing(get_connection()) as conn:
+        prescriptions = conn.execute(
+            """
+            SELECT medication_name, dosage_value, dosage_unit
+            FROM prescriptions
+            WHERE patient_id = ? AND is_active = 1
+            ORDER BY medication_name
+            """,
+            (patient_id,),
+        ).fetchall()
+        prescription_snapshot = [
+            {
+                "medication_name": row["medication_name"],
+                "dosage_value": row["dosage_value"],
+                "dosage_unit": row["dosage_unit"],
+            }
+            for row in prescriptions
+        ]
         cursor = conn.execute(
             """
-            INSERT INTO symptom_reports (patient_id, submitted_at, symptoms_json, notes)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO symptom_reports (
+                patient_id, submitted_at, symptoms_json, notes,
+                prescription_snapshot_json
+            )
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (patient_id, submitted_at, json.dumps(symptoms), saved_notes),
+            (
+                patient_id,
+                submitted_at,
+                json.dumps(symptoms),
+                saved_notes,
+                json.dumps(prescription_snapshot),
+            ),
         )
         conn.commit()
         report_id = cursor.lastrowid
@@ -96,6 +140,7 @@ def save_symptom_report(
         "submitted_at": submitted_at,
         "symptoms": symptoms,
         "notes": saved_notes,
+        "prescription_snapshot": prescription_snapshot,
     }
 
 
@@ -112,7 +157,8 @@ def list_symptom_reports(
         ).fetchone()
         rows = conn.execute(
             """
-            SELECT id, patient_id, submitted_at, symptoms_json, notes, review_status, doctor_note
+            SELECT id, patient_id, submitted_at, symptoms_json, notes,
+                   review_status, doctor_note, prescription_snapshot_json
             FROM symptom_reports
             WHERE patient_id = ?
             ORDER BY id DESC
@@ -129,6 +175,9 @@ def list_symptom_reports(
             "symptoms": json.loads(row["symptoms_json"]),
             "notes": row["notes"],
             "review_status": row["review_status"],
+            "prescription_snapshot": json.loads(
+                row["prescription_snapshot_json"] or "[]"
+            ),
             **({"doctor_note": row["doctor_note"]} if include_doctor_notes else {}),
         }
         for row in rows
@@ -321,7 +370,7 @@ def update_report_review(
         row = conn.execute(
             """
             SELECT id, patient_id, submitted_at, symptoms_json, notes,
-                   review_status, doctor_note
+                   review_status, doctor_note, prescription_snapshot_json
             FROM symptom_reports WHERE id = ? AND patient_id = ?
             """,
             (report_id, patient_id),
@@ -336,10 +385,20 @@ def update_report_review(
         "notes": row["notes"],
         "review_status": row["review_status"],
         "doctor_note": row["doctor_note"],
+        "prescription_snapshot": json.loads(
+            row["prescription_snapshot_json"] or "[]"
+        ),
     }
-def update_prescription_dosage(patient_id: str, medication_name: str, dosage_value: float, dosage_unit: str
+
+
+def update_prescription_dosage(
+    patient_id: str,
+    medication_name: str,
+    dosage_value: float,
+    dosage_unit: str,
 ) -> dict[str, Any]:
     updated_at = datetime.now(timezone.utc).isoformat()
+    normalized_name = medication_name.strip().lower()
     with closing(get_connection()) as conn:
         conn.execute(
             """
@@ -351,27 +410,52 @@ def update_prescription_dosage(patient_id: str, medication_name: str, dosage_val
                 dosage_unit = excluded.dosage_unit,
                 updated_at = excluded.updated_at
             """,
-            (patient_id, medication_name.strip().lower(), dosage_value, dosage_unit),
+            (patient_id, normalized_name, dosage_value, dosage_unit, updated_at),
         )
         conn.commit()
     return {
         "patient_id": patient_id,
-        "medication_name": medication_name.strip().lower(),
+        "medication_name": normalized_name,
         "dosage_value": dosage_value,
         "dosage_unit": dosage_unit,
         "updated_at": updated_at,
     }
 
 
-
-
-
-
-def remove_prescription(patient_id: str, medication_name: str) -> int:
+def deactivate_prescription(patient_id: str, medication_name: str) -> int:
     with closing(get_connection()) as conn:
         cursor = conn.execute(
-            "DELETE FROM prescriptions WHERE patient_id = ? AND medication_name = ?",
-            (patient_id, medication_name)
+            """
+            UPDATE prescriptions
+            SET is_active = 0
+            WHERE patient_id = ? AND medication_name = ? AND is_active = 1
+            """,
+            (patient_id, medication_name.strip().lower()),
         )
         conn.commit()
         return cursor.rowcount
+
+
+def list_prescriptions(
+    patient_id: str,
+    limit: int,
+    offset: int,
+) -> tuple[list[dict[str, Any]], int]:
+    with closing(get_connection()) as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) AS total FROM prescriptions WHERE patient_id = ?",
+            (patient_id,),
+        ).fetchone()["total"]
+        rows = conn.execute(
+            """
+            SELECT patient_id, medication_name, dosage_value, dosage_unit,
+                   updated_at, is_active
+            FROM prescriptions
+            WHERE patient_id = ?
+            ORDER BY medication_name DESC
+            LIMIT ? OFFSET ?
+            """,
+            (patient_id, limit, offset),
+        ).fetchall()
+
+    return [dict(row) for row in rows], total

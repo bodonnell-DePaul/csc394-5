@@ -94,3 +94,17 @@ class MedicationRemoveRequest(BaseModel):
     @classmethod
     def clean_medication(cls, value: str) -> str:
         return value.strip().lower()
+
+
+class MedicationStatusUpdateRequest(BaseModel):
+    patient_id: str = FIXED_PATIENT_ID
+    medication_name: str = Field(..., min_length=1)
+    active: bool
+
+    @field_validator("medication_name")
+    @classmethod
+    def clean_medication(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        if not cleaned:
+            raise ValueError("Medication name cannot be empty.")
+        return cleaned

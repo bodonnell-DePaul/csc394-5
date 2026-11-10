@@ -6,14 +6,20 @@ from .auth import require_patient_user, require_doctor_user
 from ..config import AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID, STATIC_DIR
 from .database import (
     clear_symptom_reports,
+    deactivate_prescription,
     get_patient_profile,
     get_review_counts,
     get_report_summary,
+    list_prescriptions,
     list_symptom_reports,
     save_symptom_report,
     update_report_review,
 )
-from ..middleware.schemas import DoctorReviewUpdate, SymptomReportRequest
+from ..middleware.schemas import (
+    DoctorReviewUpdate,
+    MedicationStatusUpdateRequest,
+    SymptomReportRequest,
+)
 
 router = APIRouter()
 
@@ -137,6 +143,54 @@ def list_reports(
             "offset": offset,
             "total": total,
         },
+    }
+
+
+@router.get("/api/medication")
+def get_medications(
+    patient_id: str = Query(default=FIXED_PATIENT_ID),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    user: dict = Depends(require_patient_user),
+) -> dict[str, object]:
+    if patient_id != user["patient_id"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot access another patient's medications.",
+        )
+    require_demo_patient(patient_id)
+    medications, total = list_prescriptions(user["patient_id"], limit, offset)
+    return {
+        "medications": medications,
+        "page": {"limit": limit, "offset": offset, "total": total},
+    }
+
+
+@router.patch("/api/medication")
+def update_medication_status(
+    payload: MedicationStatusUpdateRequest,
+    _user: dict = Depends(require_doctor_user),
+) -> dict[str, object]:
+    require_demo_patient(payload.patient_id)
+    if payload.active:
+        raise HTTPException(
+            status_code=422,
+            detail="Inactive medications cannot be reactivated.",
+        )
+
+    updated = deactivate_prescription(
+        payload.patient_id, payload.medication_name
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=404,
+            detail="Active medication not found.",
+        )
+
+    return {
+        "message": "Medication marked inactive.",
+        "medication_name": payload.medication_name,
+        "active": False,
     }
 
 

@@ -17,21 +17,24 @@
 | GET /api/tickets/{ticketid} | specific ticket | 200: ticket | 200:ticket|
 | POST /api/symptom_report | update health history; patientID, symptoms| 200: request confirmation |
 | GET /api/symptom_report | patient's symptom reports; patientID, limit, offset| 200: symptom_report collection|
-| PATCH /api/medication | update health prescription; patientID, medicationID| 200: request confirmation |
-| GET /api/medication | health prescription; patientID, limit, offset| 200: medication collection|
+| PATCH /api/medication | Doctor only; JSON body with `patient_id`, `medication_name`, and `active: false` to mark a prescription inactive. Inactive prescriptions cannot be reactivated or deleted. | 200: update confirmation; 401/403: authentication or role failure; 404: patient or active medication not found; 422: invalid request or reactivation attempt |
+| GET /api/medication | Patient only; optional `patient_id`, `limit` (1-100), and `offset` (0 or greater). Returns that patient's prescriptions, including inactive records. | 200: paginated medication collection; 401/403: authentication or patient-scope failure |
 
 example using synthetic data:
 ~~~
-GET /api/medication?patient=11111111-1111-2111-6111-111111111111&limit=20&offset=0
+GET /api/medication?patient_id=11111111-1111-2111-6111-111111111111&limit=20&offset=0
 Authorization: Bearer <access-token>
 ~~~
 ~~~
 {
   "medications": [
     {
-      "id": "6111-4111-2111",
-      "name": "Benadryl",
-      "manufacturer": "Kenvue"
+      "patient_id": "11111111-1111-2111-6111-111111111111",
+      "medication_name": "warfarin",
+      "dosage_value": 3,
+      "dosage_unit": "mg",
+      "updated_at": "2026-01-01T12:00:00+00:00",
+      "is_active": 1
     }
   ],
   "page":{"limit":20,"offset":0,"total":1}
