@@ -314,6 +314,47 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .status.error { color: var(--danger); }
 .status.success { color: #248159; }
 
+.submission-dialog {
+  width: min(420px, calc(100% - 32px));
+  padding: 28px;
+  color: var(--ink);
+  text-align: center;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 18px 55px rgb(22 42 57 / 24%);
+}
+.submission-dialog::backdrop { background: rgb(25 42 54 / 48%); }
+.submission-dialog-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  margin: 0 auto 13px;
+  color: #248159;
+  background: #e9f6ef;
+  border-radius: 50%;
+  font-size: 23px;
+  font-weight: 700;
+}
+.submission-dialog.error .submission-dialog-icon { color: var(--danger); background: #fff0ef; }
+.submission-dialog h2 { margin: 0; color: #24394b; font-size: 19px; }
+.submission-dialog p { margin: 10px 0 22px; color: #687987; font-size: 13px; line-height: 1.6; }
+.submission-dialog button {
+  min-width: 100px;
+  min-height: 40px;
+  padding: 0 16px;
+  color: #fff;
+  background: var(--teal);
+  border: 0;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.submission-dialog button:hover { background: var(--teal-dark); }
+.report-submit button:disabled { cursor: wait; opacity: .7; transform: none; }
+
 .history-heading { align-items: flex-end; }
 .record-count { padding: 5px 9px; color: #54736f; background: #edf6f4; border-radius: 20px; font-size: 10px; font-weight: 600; white-space: nowrap; }
 .history-panel .section-description { margin-bottom: 15px; }
