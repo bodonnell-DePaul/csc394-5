@@ -44,7 +44,16 @@ class DatabaseTests(unittest.TestCase):
                 row[1] for row in conn.execute("PRAGMA table_info(symptom_reports)")
             }
 
-        self.assertTrue({"notes", "review_status", "doctor_note"} <= columns)
+        self.assertTrue(
+            {
+                "notes",
+                "review_status",
+                "doctor_note",
+                "prescription_snapshot_json",
+                "associated_medication",
+            }
+            <= columns
+        )
 
     def test_users_are_normalized_and_sessions_expire_and_can_be_deleted(self):
         user_id = database.create_user(

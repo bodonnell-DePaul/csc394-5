@@ -31,4 +31,21 @@ AVAILABLE_SYMPTOMS = [
     "Tremor",
     "Vomiting",
 ]
-SAFE_DOSE_RANGES = {"warfarin": {"mg": (1, 10)}}
+
+AVAILABLE_MEDICATIONS = [
+    "Lexapro",
+    "Amoxicillin",
+    "Fluoxetine",
+    "Metformin",
+    "Bupropion",
+    "Warfarin",
+]
+
+SAFE_DOSE_RANGES = {
+    "warfarin": {"mg": (1.0, 10.0)},
+    "lexapro": {"mg": (5.0, 20.0)},
+    "amoxicillin": {"mg": (250.0, 875.0)},
+    "fluoxetine": {"mg": (10.0, 80.0)},
+    "metformin": {"mg": (500.0, 2550.0)},
+    "bupropion": {"mg": (75.0, 450.0)},
+}
