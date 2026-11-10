@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
@@ -86,20 +86,6 @@ function PatientDashboard({ user, onLogout }) {
   const [status, setStatus] = useState(null);
   const [submissionNotice, setSubmissionNotice] = useState(null);
   const [submittingReport, setSubmittingReport] = useState(false);
-  const submissionDialogRef = useRef(null);
-
-  useEffect(() => {
-    const dialog = submissionDialogRef.current;
-    if (submissionNotice && dialog && !dialog.open) {
-      dialog.showModal();
-    }
-
-    return () => {
-      if (dialog?.open) {
-        dialog.close();
-      }
-    };
-  }, [submissionNotice]);
 
   async function refreshHistory() {
     const [reportResult, summaryResult] = await Promise.all([
@@ -479,24 +465,36 @@ function PatientDashboard({ user, onLogout }) {
         </main>
       </div>
       {submissionNotice && (
-        <dialog
-          ref={submissionDialogRef}
-          className={`submission-dialog ${submissionNotice.isError ? 'error' : 'success'}`}
-          aria-labelledby="submission-dialog-title"
-          onCancel={(event) => {
-            event.preventDefault();
-            setSubmissionNotice(null);
+        <div
+          className="submission-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setSubmissionNotice(null);
+            }
           }}
         >
-          <div className="submission-dialog-icon" aria-hidden="true">
-            {submissionNotice.isError ? '!' : '✓'}
-          </div>
-          <h2 id="submission-dialog-title">{submissionNotice.title}</h2>
-          <p role={submissionNotice.isError ? 'alert' : 'status'}>{submissionNotice.message}</p>
-          <button type="button" autoFocus onClick={() => setSubmissionNotice(null)}>
-            Close
-          </button>
-        </dialog>
+          <section
+            className={`submission-dialog ${submissionNotice.isError ? 'error' : 'success'}`}
+            role={submissionNotice.isError ? 'alertdialog' : 'dialog'}
+            aria-modal="true"
+            aria-labelledby="submission-dialog-title"
+            aria-describedby="submission-dialog-message"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setSubmissionNotice(null);
+              }
+            }}
+          >
+            <div className="submission-dialog-icon" aria-hidden="true">
+              {submissionNotice.isError ? '!' : '✓'}
+            </div>
+            <h2 id="submission-dialog-title">{submissionNotice.title}</h2>
+            <p id="submission-dialog-message">{submissionNotice.message}</p>
+            <button type="button" autoFocus onClick={() => setSubmissionNotice(null)}>
+              Close
+            </button>
+          </section>
+        </div>
       )}
     </div>
   );
