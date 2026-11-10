@@ -13,6 +13,8 @@ services:
       mountPath: /var/data
       sizeGB: 1
     envVars:
+      - key: PORT
+        value: "10000"
       - key: HEALTHWATCH_DB_PATH
         value: /var/data/healthwatch.db
       - key: HEALTHWATCH_COOKIE_SECURE
