@@ -304,10 +304,6 @@ function PatientDashboard({ user, onLogout }) {
               <span className="summary-icon blue" aria-hidden="true">⌁</span>
               <div><span className="summary-label">Symptoms logged</span><strong>{summary?.total_symptom_entries ?? '—'}</strong><span className="summary-note">Across all your reports</span></div>
             </article>
-            <article className="summary-card care-card">
-              <span className="summary-icon lavender" aria-hidden="true">♡</span>
-              <div><span className="summary-label">Patient account</span><strong className="care-name">{patientEmail || 'Loading…'}</strong><span className="summary-note">Signed-in account for this portal</span></div>
-            </article>
           </section>
           }
 
