@@ -70,10 +70,11 @@ receives it as an HttpOnly, SameSite=Lax cookie, and SQLite stores only its
 SHA-256 hash and expiration. Patient routes require a patient role and access
 to the configured demo patient. Clinician routes require a doctor role.
 
-The current cookie is configured with `secure=False` for local HTTP
-development. Fixed demo accounts are seeded at startup. These are demo-only
-choices and are not safe defaults for an internet-facing deployment; see the
-deployment readiness notes in [04-delivery-plan.md](./04-delivery-plan.md#testing-deployment-and-release-plan).
+The `HEALTHWATCH_COOKIE_SECURE` setting defaults to `false` for local HTTP
+development and is `true` in the Render Blueprint, where HTTPS is used. Fixed
+demo accounts are seeded at startup. These are demo-only choices and are not
+safe defaults for real patient data; see the deployment readiness notes in
+[04-delivery-plan.md](./04-delivery-plan.md#testing-deployment-and-release-plan).
 
 ## Runtime and deployment shape
 
@@ -81,14 +82,18 @@ deployment readiness notes in [04-delivery-plan.md](./04-delivery-plan.md#testin
   Vite proxies `/api` requests to FastAPI.
 - **Built local demo:** `npm run build` writes the frontend into `src/public/`;
   FastAPI serves the UI and API on the same origin.
+- **Render demo:** `render.yaml` builds the frontend and Python service into a
+  Docker image. FastAPI serves the UI and API over HTTPS, and Render mounts a
+  persistent disk at `/var/data` for SQLite.
 - **Database:** SQLite is a local file, defaulting to `src/data/healthwatch.db`;
   `HEALTHWATCH_DB_PATH` can select another path. The file's parent directory
-  must exist and be writable.
-- **CI:** GitHub Actions runs backend tests plus frontend lint and build on
-  pushes and pull requests to `main`. It does not deploy the application.
-- **External integrations:** No EHR, OpenFDA, hosted database, cloud resource,
-  notification provider, or deployment pipeline is currently wired into this
-  application.
+  must exist and be writable; Render uses `/var/data/healthwatch.db`.
+- **CI and deployment:** GitHub Actions runs backend tests plus frontend lint
+  and build on pushes and pull requests to `main`. Render auto-deploys `main`
+  only after those checks pass.
+- **External integrations:** No EHR, OpenFDA, managed database, or
+  notification provider is wired into this application. Render provides
+  hosting only.
 
 SQLite keeps local setup simple but is intended here for a single-instance
 demo, not high-concurrency or multi-instance production operation. This

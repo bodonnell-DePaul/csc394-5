@@ -78,26 +78,40 @@ roles. Submit a patient report and verify it appears in the patient history
 and clinician review list; save a clinician review and confirm its status
 updates.
 
-## GitHub Actions deployment process
+## Automated Render deployment
 
+The repository includes a Render Blueprint in [`render.yaml`](./render.yaml)
+and a multi-stage [`Dockerfile`](./Dockerfile). The container builds the React
+client and runs FastAPI; Render serves both from the same web service. The
+Blueprint configures `/health` as its health check, stores SQLite at
+`/var/data/healthwatch.db` on a persistent disk, and enables secure session
+cookies over HTTPS.
 
-The workflow is [`.github/workflows/ci.yml`](./.github/workflows/ci.yml).
-GitHub runs it automatically:
+To create the Render service:
 
-1. **On every push:** checkout the commit, run backend tests on Python 3.12,
-   and, in parallel, install Node dependencies with `npm ci`, lint the
-   frontend, and build the frontend.
-2. **On pull requests targeting `main`:** run the same backend and frontend
-   checks against the proposed changes.
-3. **Review the result:** open the repository's **Actions** tab, select the
-   `Healthwatch CI` run for the commit or pull request, and wait for both
-   jobs—**Backend tests** and **Frontend lint and build**—to pass.
-4. **Merge only after success:** optionally configure repository branch
-   protection for `main` and require both jobs before merging.
-5. **After a push to `main`:** Actions runs the checks again. No deployment
-   job runs; there is no hosted URL or deployed environment produced by this
-   workflow.
+1. Push this repository to GitHub and connect it to Render.
+2. In Render, create a **Blueprint** from this repository and confirm the
+   resources described in `render.yaml`. The persistent disk requires a paid
+   web-service plan; the Blueprint selects the 0.5 CPU/512 MB plan and a 1 GB
+   disk.
+3. After the initial deployment, open the service URL and confirm `/health`
+   returns `{"status":"ok"}`. Use the demo accounts listed above; only use
+   synthetic demo data.
 
+<<<<<<< HEAD
+The existing [GitHub Actions workflow](./.github/workflows/ci.yml) runs backend
+tests and frontend lint/build on pushes and pull requests to `main`. Render is
+configured to deploy a `main` commit only after its GitHub checks pass. No
+deployment token or GitHub Actions secret is needed. Review the **Actions**
+tab for CI results and the Render dashboard's **Events** and **Logs** for
+deployment status.
+
+The persistent disk keeps the SQLite file across deploys and service restarts,
+but it is not a backup and this SQLite setup is for one demo instance only.
+This app retains fixed, documented demo credentials and is not production
+ready. Never enter real patient information.
+=======
+>>>>>>> aacb78101429d9b994b4da77c98b9d38126aa845
 
 ## Local database maintenance
 

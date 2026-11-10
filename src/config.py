@@ -1,6 +1,14 @@
 import os
 from pathlib import Path
 
+_secure_cookie_setting = os.environ.get(
+    "HEALTHWATCH_COOKIE_SECURE", "false"
+).strip().lower()
+if _secure_cookie_setting not in {"true", "false"}:
+    raise ValueError("HEALTHWATCH_COOKIE_SECURE must be 'true' or 'false'")
+
+SESSION_COOKIE_SECURE = _secure_cookie_setting == "true"
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 STATIC_DIR = PROJECT_ROOT / "src" / "public"
 DB_PATH = Path(

@@ -106,6 +106,19 @@ class ApiIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(self.client.get("/api/auth/me").status_code, 401)
 
+    def test_login_can_set_secure_session_cookie(self):
+        with patch("src.routes.auth.SESSION_COOKIE_SECURE", True):
+            response = self.client.post(
+                "/api/auth/login",
+                json={
+                    "email": "testpatient@example.com",
+                    "password": "TestPassword123!",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("; Secure", response.headers["set-cookie"])
+
     def test_auth_me_rejects_missing_or_invalid_session(self):
         self.client.post("/api/auth/logout")
         self.assertEqual(self.client.get("/api/auth/me").status_code, 401)

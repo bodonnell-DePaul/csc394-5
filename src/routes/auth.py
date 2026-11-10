@@ -9,7 +9,7 @@ from fastapi import APIRouter
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 from typing import Any
-from ..config import FIXED_PATIENT_ID
+from ..config import FIXED_PATIENT_ID, SESSION_COOKIE_SECURE
 
 from .database import (
     create_user,
@@ -99,7 +99,7 @@ def login(payload: LoginRequest, response: Response):
         key=SESSION_COOKIE,
         value=token,
         httponly=True,
-        secure=False,  # Local HTTP development only
+        secure=SESSION_COOKIE_SECURE,
         samesite="lax",
         max_age=SESSION_DURATION,
         path="/",
