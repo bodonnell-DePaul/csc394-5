@@ -34,6 +34,12 @@ DEMO_ACCOUNTS = (
         "patient_id": FIXED_PATIENT_ID,
     },
     {
+        "email": "patient2@example.com",
+        "password": "PatientPassword456!",
+        "role": "patient",
+        "patient_id": FIXED_PATIENT_ID,
+    },
+    {
         "email": "doctor@example.com",
         "password": "DoctorPassword123!",
         "role": "doctor",

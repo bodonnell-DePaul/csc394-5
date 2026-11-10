@@ -35,7 +35,9 @@ class DemoDataManagementTests(unittest.TestCase):
         self.assertEqual(self.run_command("migrate")[0], 0)
         self.assertEqual(self.run_command("seed")[0], 0)
         first_patient = database.get_user_by_email("patient@example.com")
+        second_patient = database.get_user_by_email("patient2@example.com")
         self.assertIsNotNone(first_patient)
+        self.assertIsNotNone(second_patient)
 
         self.assertEqual(self.run_command("migrate")[0], 0)
         self.assertEqual(self.run_command("seed")[0], 0)
@@ -43,6 +45,10 @@ class DemoDataManagementTests(unittest.TestCase):
         self.assertEqual(
             database.get_user_by_email("patient@example.com")["id"],
             first_patient["id"],
+        )
+        self.assertEqual(
+            database.get_user_by_email("patient2@example.com")["id"],
+            second_patient["id"],
         )
         self.assertEqual(database.list_symptom_reports(FIXED_PATIENT_ID, 20, 0), ([], 0))
 
@@ -53,7 +59,7 @@ class DemoDataManagementTests(unittest.TestCase):
         exit_code, output = self.run_command("status")
 
         self.assertEqual(exit_code, 0)
-        self.assertIn("Users: 2", output)
+        self.assertIn("Users: 3", output)
         self.assertIn("Symptom reports: 1", output)
         self.assertIn("Sessions: 0", output)
 

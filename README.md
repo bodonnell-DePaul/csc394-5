@@ -43,11 +43,12 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 | Role | Email | Password |
 |---|---|---|
 | Patient | `patient@example.com` | `PatientPassword123!` |
+| Patient | `patient2@example.com` | `PatientPassword456!` |
 | Doctor | `doctor@example.com` | `DoctorPassword123!` |
 
-At startup the server initializes the SQLite schema and creates either demo
-account if it is missing. Passwords are stored as Argon2 hashes. Startup does
-not insert sample reports.
+At startup the server initializes the SQLite schema and creates any missing
+demo accounts. Passwords are stored as Argon2 hashes. Startup does not insert
+sample reports.
 
 ## Run checks locally
 
