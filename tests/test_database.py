@@ -174,6 +174,8 @@ class DatabaseTests(unittest.TestCase):
         )
         self.assertEqual(reports[0]["notes"], "Follow up")
         self.assertEqual(reports[0]["symptoms"], ["Headache"])
+        self.assertEqual(reports[0]["prescription_snapshot"], [])
+        self.assertEqual(next_reports[0]["prescription_snapshot"], [])
 
     def test_successful_database_operations_are_logged_without_report_data(self):
         with self.assertLogs("uvicorn.error", level=logging.INFO) as captured:
