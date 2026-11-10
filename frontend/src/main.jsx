@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
@@ -84,7 +84,22 @@ function PatientDashboard({ user, onLogout }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [summary, setSummary] = useState(null);
   const [status, setStatus] = useState(null);
+  const [submissionNotice, setSubmissionNotice] = useState(null);
+  const [submittingReport, setSubmittingReport] = useState(false);
+  const submissionDialogRef = useRef(null);
 
+  useEffect(() => {
+    const dialog = submissionDialogRef.current;
+    if (submissionNotice && dialog && !dialog.open) {
+      dialog.showModal();
+    }
+
+    return () => {
+      if (dialog?.open) {
+        dialog.close();
+      }
+    };
+  }, [submissionNotice]);
 
   async function refreshHistory() {
     const [reportResult, summaryResult] = await Promise.all([
@@ -175,13 +190,15 @@ function PatientDashboard({ user, onLogout }) {
     const formData = new FormData(form);
 
     if (!selectedSymptoms.length) {
-      setStatus({
-        message: 'Please select at least one symptom.',
+      setSubmissionNotice({
+        title: 'Choose a symptom',
+        message: 'Please select at least one symptom before submitting.',
         isError: true,
       });
       return;
     }
 
+    setSubmittingReport(true);
     try {
       await requestJson('/api/symptom_report', {
         method: 'POST',
@@ -195,10 +212,28 @@ function PatientDashboard({ user, onLogout }) {
       form.reset();
       setSymptomChoice('');
       setSelectedSymptoms([]);
-      setStatus({ message: 'Symptom report saved.', isError: false });
-      await refreshHistory();
+      setSubmissionNotice({
+        title: 'Report submitted',
+        message: 'Your symptom report was saved successfully.',
+        isError: false,
+      });
+      try {
+        await refreshHistory();
+      } catch (error) {
+        setSubmissionNotice({
+          title: 'Report submitted',
+          message: `Your report was saved, but your history could not be refreshed: ${error.message}`,
+          isError: false,
+        });
+      }
     } catch (error) {
-      setStatus({ message: error.message, isError: true });
+      setSubmissionNotice({
+        title: 'Report not submitted',
+        message: error.message,
+        isError: true,
+      });
+    } finally {
+      setSubmittingReport(false);
     }
   }
   
@@ -389,7 +424,10 @@ function PatientDashboard({ user, onLogout }) {
                   <span className="field-hint">Please don’t use this form for emergencies.</span>
                 </div>
                 <div className="report-submit">
-                  <button type="submit"><span aria-hidden="true">＋</span> Save symptom report</button>
+                  <button type="submit" disabled={submittingReport}>
+                    <span aria-hidden="true">＋</span>
+                    {submittingReport ? 'Saving report…' : 'Save symptom report'}
+                  </button>
                   <span className="privacy-note"><span aria-hidden="true">▣</span> Only you and your care team can see this</span>
                 </div>
                 <div
@@ -440,6 +478,26 @@ function PatientDashboard({ user, onLogout }) {
           <footer className="portal-footer">Healthwatch <span>·</span> Your information is private and secure.</footer>
         </main>
       </div>
+      {submissionNotice && (
+        <dialog
+          ref={submissionDialogRef}
+          className={`submission-dialog ${submissionNotice.isError ? 'error' : 'success'}`}
+          aria-labelledby="submission-dialog-title"
+          onCancel={(event) => {
+            event.preventDefault();
+            setSubmissionNotice(null);
+          }}
+        >
+          <div className="submission-dialog-icon" aria-hidden="true">
+            {submissionNotice.isError ? '!' : '✓'}
+          </div>
+          <h2 id="submission-dialog-title">{submissionNotice.title}</h2>
+          <p role={submissionNotice.isError ? 'alert' : 'status'}>{submissionNotice.message}</p>
+          <button type="button" autoFocus onClick={() => setSubmissionNotice(null)}>
+            Close
+          </button>
+        </dialog>
+      )}
     </div>
   );
 }
