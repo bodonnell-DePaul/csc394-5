@@ -103,7 +103,7 @@ To create the Render service:
    returns `{"status":"ok"}`. Use the demo accounts listed above; only use
    synthetic demo data.
 
-<<<<<<< HEAD
+HEAD
 The existing [GitHub Actions workflow](./.github/workflows/ci.yml) runs backend
 tests and frontend lint/build on pushes and pull requests to `main`. Render is
 configured to deploy a `main` commit only after its GitHub checks pass. No
@@ -115,8 +115,6 @@ The persistent disk keeps the SQLite file across deploys and service restarts,
 but it is not a backup and this SQLite setup is for one demo instance only.
 This app retains fixed, documented demo credentials and is not production
 ready. Never enter real patient information.
-=======
->>>>>>> aacb78101429d9b994b4da77c98b9d38126aa845
 
 ## Local database maintenance
 
