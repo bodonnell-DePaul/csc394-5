@@ -34,7 +34,7 @@ class SymptomDetail(BaseModel):
 
 
 class SymptomReportRequest(BaseModel):
-    patient_id: str = FIXED_PATIENT_ID
+    patient_id: str | None = None
     symptoms: list[SymptomDetail | str]
     notes: str | None = Field(default=None, max_length=1000)
     associated_medication: str | None = Field(default=None, min_length=1)

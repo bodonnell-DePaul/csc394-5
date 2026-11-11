@@ -7,7 +7,12 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from src.config import AVAILABLE_MEDICATIONS, AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID
+from src.config import (
+    AVAILABLE_MEDICATIONS,
+    AVAILABLE_SYMPTOMS,
+    FIXED_PATIENT_ID,
+    SECOND_DEMO_PATIENT_ID,
+)
 from src.routes import database
 from src.routes.auth import password_hasher
 from src.routes import routes
@@ -193,6 +198,63 @@ class ApiIntegrationTests(unittest.TestCase):
                 ],
             },
         )
+
+    def test_second_demo_patient_can_access_own_data_only(self):
+        self.client.post("/api/auth/logout")
+        login = self.client.post(
+            "/api/auth/login",
+            json={
+                "email": "patient2@example.com",
+                "password": "PatientPassword456!",
+            },
+        )
+        self.assertEqual(login.status_code, 200)
+
+        patient = self.client.get("/api/patient")
+        summary = self.client.get("/api/symptom_report/summary")
+        reports = self.client.get("/api/symptom_report")
+        medications = self.client.get("/api/medication")
+        created = self.client.post(
+            "/api/symptom_report",
+            json={"symptoms": ["Cough"], "notes": "Patient 2 report"},
+        )
+
+        self.assertEqual(patient.status_code, 200)
+        self.assertEqual(patient.json()["patient"]["id"], SECOND_DEMO_PATIENT_ID)
+        self.assertEqual(summary.status_code, 200)
+        self.assertEqual(reports.status_code, 200)
+        self.assertEqual(medications.status_code, 200)
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(
+            created.json()["report"]["patient_id"], SECOND_DEMO_PATIENT_ID
+        )
+        self.assertEqual(
+            self.client.get(
+                "/api/patient",
+                params={"patient_id": FIXED_PATIENT_ID},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(
+                "/api/symptom_report",
+                params={"patient_id": FIXED_PATIENT_ID},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/symptom_report",
+                json={
+                    "patient_id": FIXED_PATIENT_ID,
+                    "symptoms": ["Nausea"],
+                },
+            ).status_code,
+            403,
+        )
+        deleted = self.client.delete("/api/symptom_report")
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(deleted.json()["deleted_rows"], 1)
 
     def test_symptom_report_accepts_details_and_associated_medication(self):
         database.update_prescription_dosage(
