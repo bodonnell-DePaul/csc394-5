@@ -19,6 +19,7 @@ from .database import (
     create_user,
     create_session,
     delete_session,
+    get_patient_profile,
     get_session_user,
     get_user_by_email,
     update_user_patient_id,
@@ -192,7 +193,7 @@ def require_authenticated_user(
 def require_patient_user(
     user: dict[str, Any] = Depends(require_authenticated_user),
 ) -> dict[str, Any]:
-    """Require a patient account assigned to the demo patient."""
+    """Require a patient account assigned to a valid patient profile."""
 
     if user["role"] != "patient":
         raise HTTPException(
@@ -200,7 +201,8 @@ def require_patient_user(
             detail="Patient access required.",
         )
 
-    if user["patient_id"] != FIXED_PATIENT_ID:
+    patient_id = user.get("patient_id")
+    if not patient_id or get_patient_profile(patient_id) is None:
         raise HTTPException(
             status_code=403,
             detail="Access to this patient is forbidden.",

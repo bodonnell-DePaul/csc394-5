@@ -6,7 +6,6 @@ from .auth import require_patient_user, require_doctor_user
 from ..config import (
     AVAILABLE_MEDICATIONS,
     AVAILABLE_SYMPTOMS,
-    FIXED_PATIENT_ID,
     STATIC_DIR,
 )
 from .database import (
@@ -33,14 +32,6 @@ from ..middleware.schemas import (
 router = APIRouter()
 
 
-def require_demo_patient(patient_id: str) -> None:
-    if patient_id != FIXED_PATIENT_ID:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Patient not found.",
-        )
-
-
 @router.get("/")
 def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
@@ -53,10 +44,19 @@ def health() -> dict[str, str]:
 
 @router.get("/api/patient")
 def get_patient(
-    patient_id: str = FIXED_PATIENT_ID,
+    patient_id: str | None = Query(default=None),
     user: dict = Depends(require_patient_user),
 ) -> dict[str, object]:
-    require_demo_patient(patient_id)
+    if patient_id is not None and get_patient_profile(patient_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Patient not found.",
+        )
+    if patient_id is not None and patient_id != user["patient_id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot access another patient's profile.",
+        )
     return {
         "patient": {
             "id": user["patient_id"],
@@ -77,11 +77,20 @@ def get_available_medications() -> dict[str, list[str]]:
 
 @router.get("/api/symptom_report/summary")
 def get_summary(
-    patient_id: str = FIXED_PATIENT_ID,
-    _user: dict = Depends(require_patient_user),
+    patient_id: str | None = Query(default=None),
+    user: dict = Depends(require_patient_user),
 ) -> dict[str, object]:
-    require_demo_patient(patient_id)
-    return {"summary": get_report_summary(patient_id)}
+    if patient_id is not None and get_patient_profile(patient_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Patient not found.",
+        )
+    if patient_id is not None and patient_id != user["patient_id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot access another patient's summary.",
+        )
+    return {"summary": get_report_summary(user["patient_id"])}
 
 
 @router.post("/api/symptom_report", status_code=status.HTTP_201_CREATED)
@@ -89,11 +98,9 @@ def create_symptom_report(
     payload: SymptomReportRequest,
     user: dict = Depends(require_patient_user),
 ) -> dict[str, object]:
-    require_demo_patient(payload.patient_id)
-
-    if payload.patient_id != user["patient_id"]:
+    if payload.patient_id is not None and payload.patient_id != user["patient_id"]:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot submit reports for another patient.",
         )
 
@@ -117,17 +124,15 @@ def create_symptom_report(
 
 @router.delete("/api/symptom_report")
 def clear_reports(
-    patient_id: str = Query(default=FIXED_PATIENT_ID),
+    patient_id: str | None = Query(default=None),
     user: dict = Depends(require_patient_user),
 ) -> dict[str, object]:
 
-    if patient_id != user["patient_id"]:
+    if patient_id is not None and patient_id != user["patient_id"]:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot delete another patient's reports.",
         )
-
-    require_demo_patient(patient_id)
 
     deleted_rows = clear_symptom_reports(user["patient_id"])
 
@@ -139,18 +144,16 @@ def clear_reports(
 
 @router.get("/api/symptom_report")
 def list_reports(
-    patient_id: str = Query(default=FIXED_PATIENT_ID),
+    patient_id: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     user: dict = Depends(require_patient_user),
 ) -> dict[str, object]:
-    if patient_id != user["patient_id"]:
+    if patient_id is not None and patient_id != user["patient_id"]:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot access another patient's reports.",
         )
-
-    require_demo_patient(patient_id)
 
     reports, total = list_symptom_reports(
         user["patient_id"], limit, offset
@@ -168,17 +171,16 @@ def list_reports(
 
 @router.get("/api/medication")
 def get_medications(
-    patient_id: str = Query(default=FIXED_PATIENT_ID),
+    patient_id: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     user: dict = Depends(require_patient_user),
 ) -> dict[str, object]:
-    if patient_id != user["patient_id"]:
+    if patient_id is not None and patient_id != user["patient_id"]:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot access another patient's medications.",
         )
-    require_demo_patient(patient_id)
     medications, total = list_prescriptions(user["patient_id"], limit, offset)
     return {
         "medications": medications,
