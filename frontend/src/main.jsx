@@ -84,6 +84,9 @@ function PatientDashboard({ user, onLogout }) {
   const [symptoms, setSymptoms] = useState([]);
   const [symptomChoice, setSymptomChoice] = useState('');
   const [selectedSymptoms, setSelectedSymptoms] = useState([]);
+  const [medications, setMedications] = useState([]);
+  const [loadingMedications, setLoadingMedications] = useState(false);
+  const [selectedMedication, setSelectedMedication] = useState('');
   const [reports, setReports] = useState([]);
   const [reportTotal, setReportTotal] = useState(0);
   const [reportSearch, setReportSearch] = useState('');
@@ -158,6 +161,35 @@ function PatientDashboard({ user, onLogout }) {
     };
   }, [user]);
 
+  useEffect(() => {
+    if (!user || activePage !== 'log') return undefined;
+
+    let active = true;
+    setLoadingMedications(true);
+    requestJson('/api/medication?limit=100&offset=0')
+      .then((result) => {
+        if (active) {
+          setMedications(
+            result.medications
+              .filter((medication) => medication.is_active)
+              .map((medication) => medication.medication_name),
+          );
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setStatus({ message: error.message, isError: true });
+        }
+      })
+      .finally(() => {
+        if (active) setLoadingMedications(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activePage, user]);
+
   function navigateTo(page) {
     setActivePage(page);
     setStatus(null);
@@ -217,12 +249,14 @@ function PatientDashboard({ user, onLogout }) {
         body: JSON.stringify({
           symptoms: selectedSymptoms,
           notes: formData.get('notes'),
+          associated_medication: selectedMedication || null,
         }),
       });
 
       form.reset();
       setSymptomChoice('');
       setSelectedSymptoms([]);
+      setSelectedMedication('');
       setSubmissionNotice({
         title: 'Report submitted',
         message: 'Your symptom report was saved successfully.',
@@ -262,6 +296,8 @@ function PatientDashboard({ user, onLogout }) {
         const name = typeof symptom === 'object' ? symptom.name : symptom;
         return name?.toLowerCase().includes(query);
       })
+      || (report.associated_medication
+        && report.associated_medication.toLowerCase().includes(query))
       || (report.notes || '').toLowerCase().includes(query);
   });
 
@@ -273,6 +309,9 @@ function PatientDashboard({ user, onLogout }) {
           <time className="meta" dateTime={report.submitted_at}>
             {new Date(report.submitted_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
           </time>
+          {report.associated_medication && (
+            <span className="medication-badge">Med: {report.associated_medication}</span>
+          )}
         </div>
         <div className="pill-list">
           {report.symptoms.map((symptom, index) => {
@@ -454,6 +493,28 @@ function PatientDashboard({ user, onLogout }) {
                     </div>
                   )}
                   <span className="field-hint">Add as many as you need.</span>
+                </div>
+                <div className="field">
+                  <label className="field-label" htmlFor="medication-select">
+                    Associated medication <span>(optional)</span>
+                  </label>
+                  <select
+                    id="medication-select"
+                    value={selectedMedication}
+                    onChange={(event) => setSelectedMedication(event.target.value)}
+                    disabled={loadingMedications}
+                  >
+                    <option value="">
+                      {loadingMedications
+                        ? 'Loading your medications…'
+                        : medications.length
+                          ? 'No associated medication'
+                          : 'No active medications available'}
+                    </option>
+                    {medications.map((medication) => (
+                      <option key={medication} value={medication}>{medication}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="field">
                   <label className="field-label" htmlFor="report-notes">Anything else you’d like us to know? <span>(optional)</span></label>
