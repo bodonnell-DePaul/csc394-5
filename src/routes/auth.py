@@ -9,7 +9,11 @@ from fastapi import APIRouter
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 from typing import Any
-from ..config import FIXED_PATIENT_ID, SESSION_COOKIE_SECURE
+from ..config import (
+    FIXED_PATIENT_ID,
+    SECOND_DEMO_PATIENT_ID,
+    SESSION_COOKIE_SECURE,
+)
 
 from .database import (
     create_user,
@@ -17,6 +21,7 @@ from .database import (
     delete_session,
     get_session_user,
     get_user_by_email,
+    update_user_patient_id,
 )
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 @router.get("/status")
@@ -37,7 +42,7 @@ DEMO_ACCOUNTS = (
         "email": "patient2@example.com",
         "password": "PatientPassword456!",
         "role": "patient",
-        "patient_id": FIXED_PATIENT_ID,
+        "patient_id": SECOND_DEMO_PATIENT_ID,
     },
     {
         "email": "doctor@example.com",
@@ -51,12 +56,20 @@ DEMO_ACCOUNTS = (
 def seed_demo_accounts() -> None:
     """Create the documented demo accounts when they are not already present."""
     for account in DEMO_ACCOUNTS:
-        if get_user_by_email(account["email"]) is None:
+        existing_user = get_user_by_email(account["email"])
+        if existing_user is None:
             create_user(
                 email=account["email"],
                 password_hash=hash_password(account["password"]),
                 role=account["role"],
                 patient_id=account["patient_id"],
+            )
+        elif (
+            account["role"] == "patient"
+            and existing_user["patient_id"] != account["patient_id"]
+        ):
+            update_user_patient_id(
+                account["email"], account["patient_id"]
             )
 
 

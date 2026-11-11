@@ -19,17 +19,34 @@ DB_PATH = Path(
 )
 
 FIXED_PATIENT_ID = "11111111-1111-2111-6111-111111111111"
+SECOND_DEMO_PATIENT_ID = "22222222-2222-4222-8222-222222222222"
 AVAILABLE_SYMPTOMS = [
+    "Acid reflux",
+    "Change in appetite",
+    "Congestion",
+    "Cough",
+    "Depression",
+    "Diarrhea",
     "Dizziness",
+    "Fainting",
     "Fatigue",
+    "Fever",
+    "Flatulence",
+    "Hair loss",
+    "Hearing impairment",
     "Headache",
+    "Indigestion",
     "Nausea",
     "Rash",
-    "Shortness of breath",
+    "Seizure",
+    "Sleepiness",
     "Sleep disturbance",
+    "Shortness of breath",
     "Swelling",
+    "Thirst",
     "Tremor",
     "Vomiting",
+    "Vision impairment",
 ]
 
 AVAILABLE_MEDICATIONS = [

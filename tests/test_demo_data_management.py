@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from src.config import FIXED_PATIENT_ID
+from src.config import FIXED_PATIENT_ID, SECOND_DEMO_PATIENT_ID
 from src import manage_demo_data
 from src.routes import database
 
@@ -50,7 +50,25 @@ class DemoDataManagementTests(unittest.TestCase):
             database.get_user_by_email("patient2@example.com")["id"],
             second_patient["id"],
         )
+        self.assertEqual(first_patient["patient_id"], FIXED_PATIENT_ID)
+        self.assertEqual(second_patient["patient_id"], SECOND_DEMO_PATIENT_ID)
         self.assertEqual(database.list_symptom_reports(FIXED_PATIENT_ID, 20, 0), ([], 0))
+
+    def test_seed_separates_existing_demo_patient_accounts(self):
+        database.init_db()
+        from src.routes.auth import hash_password, seed_demo_accounts
+
+        database.create_user(
+            "patient2@example.com",
+            hash_password("PatientPassword456!"),
+            patient_id=FIXED_PATIENT_ID,
+        )
+        seed_demo_accounts()
+
+        self.assertEqual(
+            database.get_user_by_email("patient2@example.com")["patient_id"],
+            SECOND_DEMO_PATIENT_ID,
+        )
 
     def test_status_reports_database_counts(self):
         self.run_command("seed")

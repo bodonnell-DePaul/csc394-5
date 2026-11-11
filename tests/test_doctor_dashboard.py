@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from src.config import FIXED_PATIENT_ID
+from src.config import FIXED_PATIENT_ID, SECOND_DEMO_PATIENT_ID
 from src.routes import database
 from src.routes.auth import seed_demo_accounts
 from src.server.main import create_app
@@ -54,13 +54,19 @@ class DoctorDashboardTests(unittest.TestCase):
         report_id = created.json()["report"]["id"]
 
         # Patients must not access doctor-only endpoints.
-        forbidden = self.client.get("/api/doctor/dashboard")
+        forbidden = self.client.get(
+            "/api/doctor/dashboard",
+            params={"patient_id": FIXED_PATIENT_ID},
+        )
         self.assertEqual(forbidden.status_code, 403)
 
         self.client.post("/api/auth/logout")
         self.login("doctor")
 
-        dashboard = self.client.get("/api/doctor/dashboard")
+        dashboard = self.client.get(
+            "/api/doctor/dashboard",
+            params={"patient_id": FIXED_PATIENT_ID},
+        )
         self.assertEqual(dashboard.status_code, 200)
         self.assertEqual(dashboard.json()["review_counts"]["pending"], 1)
         self.assertEqual(
@@ -69,6 +75,7 @@ class DoctorDashboardTests(unittest.TestCase):
 
         reviewed = self.client.patch(
             f"/api/doctor/reports/{report_id}",
+            params={"patient_id": FIXED_PATIENT_ID},
             json={
                 "review_status": "reviewed",
                 "doctor_note": "  Follow up at next visit  ",
@@ -80,7 +87,10 @@ class DoctorDashboardTests(unittest.TestCase):
             "Follow up at next visit",
         )
 
-        refreshed = self.client.get("/api/doctor/dashboard").json()
+        refreshed = self.client.get(
+            "/api/doctor/dashboard",
+            params={"patient_id": FIXED_PATIENT_ID},
+        ).json()
         self.assertEqual(refreshed["review_counts"]["reviewed"], 1)
         self.assertEqual(
             refreshed["reports"][0]["review_status"], "reviewed"
@@ -98,19 +108,24 @@ class DoctorDashboardTests(unittest.TestCase):
 
     def test_missing_report_and_invalid_status(self):
         # Unauthenticated requests are rejected.
-        unauthenticated = self.client.get("/api/doctor/dashboard")
+        unauthenticated = self.client.get(
+            "/api/doctor/dashboard",
+            params={"patient_id": FIXED_PATIENT_ID},
+        )
         self.assertEqual(unauthenticated.status_code, 401)
 
         self.login("doctor")
 
         missing = self.client.patch(
             "/api/doctor/reports/9999",
+            params={"patient_id": FIXED_PATIENT_ID},
             json={"review_status": "reviewed", "doctor_note": ""},
         )
         self.assertEqual(missing.status_code, 404)
 
         invalid = self.client.patch(
             "/api/doctor/reports/1",
+            params={"patient_id": FIXED_PATIENT_ID},
             json={"review_status": "urgent", "doctor_note": ""},
         )
         self.assertEqual(invalid.status_code, 422)
@@ -133,7 +148,11 @@ class DoctorDashboardTests(unittest.TestCase):
 
         response = self.client.get(
             "/api/doctor/dashboard",
-            params={"limit": 1, "offset": 1},
+            params={
+                "patient_id": FIXED_PATIENT_ID,
+                "limit": 1,
+                "offset": 1,
+            },
         )
 
         self.assertEqual(response.status_code, 200)
@@ -155,12 +174,107 @@ class DoctorDashboardTests(unittest.TestCase):
         self.assertNotEqual(body["reports"][0]["id"], first["id"])
         self.assertNotEqual(body["reports"][0]["id"], third["id"])
 
+    def test_dashboard_and_reviews_are_scoped_to_selected_patient(self):
+        first_patient_report = database.save_symptom_report(
+            FIXED_PATIENT_ID, ["Nausea"], "First patient update"
+        )
+        second_patient_report = database.save_symptom_report(
+            SECOND_DEMO_PATIENT_ID, ["Headache"], "Second patient update"
+        )
+        self.login("doctor")
+
+        first_dashboard = self.client.get(
+            "/api/doctor/dashboard",
+            params={"patient_id": FIXED_PATIENT_ID},
+        ).json()
+        second_dashboard = self.client.get(
+            "/api/doctor/dashboard",
+            params={"patient_id": SECOND_DEMO_PATIENT_ID},
+        ).json()
+        self.assertEqual(
+            [report["id"] for report in first_dashboard["reports"]],
+            [first_patient_report["id"]],
+        )
+        self.assertEqual(
+            [report["id"] for report in second_dashboard["reports"]],
+            [second_patient_report["id"]],
+        )
+        self.assertEqual(first_dashboard["summary"]["total_reports"], 1)
+        self.assertEqual(second_dashboard["summary"]["total_reports"], 1)
+
+        wrong_patient_review = self.client.patch(
+            f"/api/doctor/reports/{second_patient_report['id']}",
+            params={"patient_id": FIXED_PATIENT_ID},
+            json={"review_status": "reviewed", "doctor_note": "Wrong patient"},
+        )
+        self.assertEqual(wrong_patient_review.status_code, 404)
+        self.assertEqual(
+            database.list_symptom_reports(
+                SECOND_DEMO_PATIENT_ID,
+                20,
+                0,
+                include_doctor_notes=True,
+            )[0][0]["review_status"],
+            "pending",
+        )
+
+        correct_patient_review = self.client.patch(
+            f"/api/doctor/reports/{second_patient_report['id']}",
+            params={"patient_id": SECOND_DEMO_PATIENT_ID},
+            json={"review_status": "reviewed", "doctor_note": "Follow up"},
+        )
+        self.assertEqual(correct_patient_review.status_code, 200)
+        self.assertEqual(
+            correct_patient_review.json()["report"]["patient_id"],
+            SECOND_DEMO_PATIENT_ID,
+        )
+
+    def test_dashboard_rejects_unknown_patient_and_requires_patient_id(self):
+        self.login("doctor")
+        unknown = self.client.get(
+            "/api/doctor/dashboard",
+            params={"patient_id": "unknown-patient"},
+        )
+        missing = self.client.get("/api/doctor/dashboard")
+
+        self.assertEqual(unknown.status_code, 404)
+        self.assertEqual(missing.status_code, 422)
+
+    def test_doctor_can_list_searchable_patient_directory(self):
+        self.login("patient")
+        forbidden = self.client.get("/api/doctor/patients")
+        self.assertEqual(forbidden.status_code, 403)
+
+        self.client.post("/api/auth/logout")
+        self.login("doctor")
+        response = self.client.get("/api/doctor/patients")
+
+        self.assertEqual(response.status_code, 200)
+        patients = response.json()["patients"]
+        self.assertCountEqual(
+            patients,
+            [
+                {"id": FIXED_PATIENT_ID, "email": "patient@example.com"},
+                {"id": SECOND_DEMO_PATIENT_ID, "email": "patient2@example.com"},
+            ],
+        )
+
+    def test_favicon_is_served_as_svg(self):
+        page = self.client.get("/")
+        response = self.client.get("/static/favicon.svg")
+
+        self.assertIn('href="/static/favicon.svg"', page.text)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("image/svg+xml", response.headers["content-type"])
+        self.assertIn("<svg", response.text)
+
     def test_review_endpoint_rejects_patients_and_oversized_notes(self):
         report = database.save_symptom_report(FIXED_PATIENT_ID, ["Nausea"])
         self.login("patient")
 
         forbidden = self.client.patch(
             f"/api/doctor/reports/{report['id']}",
+            params={"patient_id": FIXED_PATIENT_ID},
             json={"review_status": "reviewed", "doctor_note": "Not allowed"},
         )
         self.assertEqual(forbidden.status_code, 403)
@@ -169,6 +283,7 @@ class DoctorDashboardTests(unittest.TestCase):
         self.login("doctor")
         invalid_note = self.client.patch(
             f"/api/doctor/reports/{report['id']}",
+            params={"patient_id": FIXED_PATIENT_ID},
             json={"review_status": "reviewed", "doctor_note": "x" * 1001},
         )
         self.assertEqual(invalid_note.status_code, 422)
@@ -183,12 +298,17 @@ class DoctorDashboardTests(unittest.TestCase):
     def test_doctor_routes_require_auth_and_validate_pagination_and_report_id(self):
         unauthenticated_review = self.client.patch(
             "/api/doctor/reports/1",
+            params={"patient_id": FIXED_PATIENT_ID},
             json={"review_status": "reviewed", "doctor_note": ""},
         )
         self.assertEqual(unauthenticated_review.status_code, 401)
 
         self.login("doctor")
-        for params in ({"limit": 0}, {"limit": 101}, {"offset": -1}):
+        for params in (
+            {"patient_id": FIXED_PATIENT_ID, "limit": 0},
+            {"patient_id": FIXED_PATIENT_ID, "limit": 101},
+            {"patient_id": FIXED_PATIENT_ID, "offset": -1},
+        ):
             with self.subTest(params=params):
                 response = self.client.get(
                     "/api/doctor/dashboard",
@@ -198,6 +318,7 @@ class DoctorDashboardTests(unittest.TestCase):
 
         invalid_report_id = self.client.patch(
             "/api/doctor/reports/not-a-number",
+            params={"patient_id": FIXED_PATIENT_ID},
             json={"review_status": "reviewed", "doctor_note": ""},
         )
         self.assertEqual(invalid_report_id.status_code, 422)
@@ -210,6 +331,7 @@ class DoctorDashboardTests(unittest.TestCase):
 
         response = self.client.patch(
             f"/api/doctor/reports/{report['id']}",
+            params={"patient_id": FIXED_PATIENT_ID},
             json={"review_status": "reviewed", "doctor_note": "   "},
         )
 
@@ -233,6 +355,7 @@ class DoctorDashboardTests(unittest.TestCase):
 
         response = self.client.patch(
             f"/api/doctor/reports/{report['id']}",
+            params={"patient_id": FIXED_PATIENT_ID},
             json={"review_status": "reviewed", "doctor_note": note},
         )
 

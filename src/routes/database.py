@@ -236,6 +236,33 @@ def get_patient_profile(patient_id: str) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+def list_patient_profiles() -> list[dict[str, Any]]:
+    with closing(get_connection()) as conn:
+        rows = conn.execute(
+            """
+            SELECT patient_id AS id, MIN(email) AS email
+            FROM users
+            WHERE role = 'patient' AND patient_id IS NOT NULL
+            GROUP BY patient_id
+            ORDER BY email
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def update_user_patient_id(email: str, patient_id: str) -> None:
+    with closing(get_connection()) as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET patient_id = ?
+            WHERE email = ? AND role = 'patient'
+            """,
+            (patient_id, email.strip().lower()),
+        )
+        conn.commit()
+
+
 def get_report_summary(patient_id: str) -> dict[str, Any]:
     with closing(get_connection()) as conn:
         total = conn.execute(
