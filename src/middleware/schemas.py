@@ -105,21 +105,34 @@ class DoctorReviewUpdate(BaseModel):
         return value.strip()
 
 class DosageUpdateRequest(BaseModel):
-    patient_id: str = FIXED_PATIENT_ID
+    patient_id: str = Field(..., min_length=1)
     medication_name: str = Field(..., min_length=1)
     dosage_value: float = Field(..., gt=0, description="Dosage must be greater than 0")
-    dosage_unit: str
+    dosage_unit: Literal["mg"]
+
+    @field_validator("patient_id")
+    @classmethod
+    def clean_patient_id(cls, value: str) -> str:
+        cleaned_id = value.strip()
+        if not cleaned_id:
+            raise ValueError("Patient ID cannot be empty.")
+        return cleaned_id
 
     @field_validator("medication_name")
     @classmethod
     def clean_medication(cls, value: str) -> str:
-        return value.strip().lower()
+        cleaned_name = value.strip().lower()
+        if cleaned_name not in {
+            medication.lower() for medication in AVAILABLE_MEDICATIONS
+        }:
+            raise ValueError("Unsupported medication.")
+        return cleaned_name
 
     @model_validator(mode="after")
-    def check_safe_range(self):
+    def check_safe_range(self) -> "DosageUpdateRequest":
         limits = SAFE_DOSE_RANGES.get(self.medication_name, {}).get(self.dosage_unit)
         if limits is None:
-            return self  # unknown medication or unit: no range to check
+            raise ValueError("No safe dosage range is configured for this medication.")
         low, high = limits
         if not low <= self.dosage_value <= high:
             raise ValueError(
@@ -140,9 +153,17 @@ class MedicationRemoveRequest(BaseModel):
 
 
 class MedicationStatusUpdateRequest(BaseModel):
-    patient_id: str = FIXED_PATIENT_ID
+    patient_id: str = Field(..., min_length=1)
     medication_name: str = Field(..., min_length=1)
     active: bool
+
+    @field_validator("patient_id")
+    @classmethod
+    def clean_patient_id(cls, value: str) -> str:
+        cleaned_id = value.strip()
+        if not cleaned_id:
+            raise ValueError("Patient ID cannot be empty.")
+        return cleaned_id
 
     @field_validator("medication_name")
     @classmethod

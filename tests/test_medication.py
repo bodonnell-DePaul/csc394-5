@@ -7,7 +7,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from src.config import FIXED_PATIENT_ID
+from src.config import FIXED_PATIENT_ID, SECOND_DEMO_PATIENT_ID
 from src.middleware.schemas import DosageUpdateRequest
 from src.routes import database
 from src.routes.auth import password_hasher
@@ -19,6 +19,7 @@ class MedicationSchemaTests(unittest.TestCase):
         for dosage in (1, 10):
             with self.subTest(dosage=dosage):
                 request = DosageUpdateRequest(
+                    patient_id=FIXED_PATIENT_ID,
                     medication_name=" Warfarin ",
                     dosage_value=dosage,
                     dosage_unit="mg",
@@ -31,10 +32,10 @@ class MedicationSchemaTests(unittest.TestCase):
 
     def test_dosage_request_rejects_nonpositive_and_unsafe_doses(self):
         invalid_requests = (
-            {"medication_name": "warfarin", "dosage_value": 0, "dosage_unit": "mg"},
-            {"medication_name": "warfarin", "dosage_value": -1, "dosage_unit": "mg"},
-            {"medication_name": "warfarin", "dosage_value": 0.9, "dosage_unit": "mg"},
-            {"medication_name": "warfarin", "dosage_value": 10.1, "dosage_unit": "mg"},
+            {"patient_id": FIXED_PATIENT_ID, "medication_name": "warfarin", "dosage_value": 0, "dosage_unit": "mg"},
+            {"patient_id": FIXED_PATIENT_ID, "medication_name": "warfarin", "dosage_value": -1, "dosage_unit": "mg"},
+            {"patient_id": FIXED_PATIENT_ID, "medication_name": "warfarin", "dosage_value": 0.9, "dosage_unit": "mg"},
+            {"patient_id": FIXED_PATIENT_ID, "medication_name": "warfarin", "dosage_value": 10.1, "dosage_unit": "mg"},
         )
 
         for request in invalid_requests:
@@ -44,9 +45,10 @@ class MedicationSchemaTests(unittest.TestCase):
 
     def test_dosage_request_requires_medication_name_value_and_unit(self):
         for request in (
-            {"medication_name": "", "dosage_value": 5, "dosage_unit": "mg"},
-            {"medication_name": "warfarin", "dosage_unit": "mg"},
-            {"medication_name": "warfarin", "dosage_value": 5},
+            {"patient_id": FIXED_PATIENT_ID, "medication_name": "", "dosage_value": 5, "dosage_unit": "mg"},
+            {"patient_id": FIXED_PATIENT_ID, "medication_name": "warfarin", "dosage_unit": "mg"},
+            {"patient_id": FIXED_PATIENT_ID, "medication_name": "warfarin", "dosage_value": 5},
+            {"medication_name": "warfarin", "dosage_value": 5, "dosage_unit": "mg"},
         ):
             with self.subTest(request=request):
                 with self.assertRaises(ValidationError):
@@ -224,6 +226,11 @@ class MedicationRouteTests(unittest.TestCase):
             password_hash=password_hasher.hash("TestPassword123!"),
             role="doctor",
         )
+        database.create_user(
+            email="medication-patient2@example.com",
+            password_hash=password_hasher.hash("TestPassword456!"),
+            patient_id=SECOND_DEMO_PATIENT_ID,
+        )
         self.login("patient")
 
     def login(self, role):
@@ -237,6 +244,176 @@ class MedicationRouteTests(unittest.TestCase):
             json={"email": email, "password": password},
         )
         self.assertEqual(response.status_code, 200)
+
+    def test_doctor_can_add_and_list_patient_medications(self):
+        forbidden = self.client.post(
+            "/api/doctor/medications",
+            json={
+                "patient_id": FIXED_PATIENT_ID,
+                "medication_name": "lexapro",
+                "dosage_value": 10,
+                "dosage_unit": "mg",
+            },
+        )
+        self.assertEqual(forbidden.status_code, 403)
+
+        self.client.post("/api/auth/logout")
+        self.login("doctor")
+
+        added = self.client.post(
+            "/api/doctor/medications",
+            json={
+                "patient_id": FIXED_PATIENT_ID,
+                "medication_name": "Lexapro",
+                "dosage_value": 10,
+                "dosage_unit": "mg",
+            },
+        )
+
+        self.assertEqual(added.status_code, 201)
+        medication = added.json()["medication"]
+        self.assertEqual(medication["patient_id"], FIXED_PATIENT_ID)
+        self.assertEqual(medication["medication_name"], "lexapro")
+        self.assertEqual(medication["dosage_value"], 10)
+        self.assertEqual(medication["dosage_unit"], "mg")
+        self.assertEqual(medication["is_active"], True)
+
+        listed = self.client.get(
+            "/api/doctor/medications",
+            params={"patient_id": FIXED_PATIENT_ID},
+        )
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json()["medications"], [medication])
+
+    def test_doctor_can_assign_medications_to_different_patients(self):
+        self.client.post("/api/auth/logout")
+        self.login("doctor")
+
+        patient_list = self.client.get("/api/doctor/patients")
+        self.assertEqual(patient_list.status_code, 200)
+        patients = patient_list.json()["patients"]
+        self.assertIn(
+            SECOND_DEMO_PATIENT_ID,
+            {patient["id"] for patient in patients},
+        )
+
+        database.update_prescription_dosage(
+            FIXED_PATIENT_ID, "lexapro", 10, "mg"
+        )
+        added = self.client.post(
+            "/api/doctor/medications",
+            json={
+                "patient_id": SECOND_DEMO_PATIENT_ID,
+                "medication_name": "fluoxetine",
+                "dosage_value": 20,
+                "dosage_unit": "mg",
+            },
+        )
+        self.assertEqual(added.status_code, 201)
+        self.assertEqual(added.json()["medication"]["patient_id"], SECOND_DEMO_PATIENT_ID)
+
+        original_patient = self.client.get(
+            "/api/doctor/medications",
+            params={"patient_id": FIXED_PATIENT_ID},
+        )
+        second_patient = self.client.get(
+            "/api/doctor/medications",
+            params={"patient_id": SECOND_DEMO_PATIENT_ID},
+        )
+        self.assertEqual(
+            [item["medication_name"] for item in original_patient.json()["medications"]],
+            ["lexapro"],
+        )
+        self.assertEqual(
+            [item["medication_name"] for item in second_patient.json()["medications"]],
+            ["fluoxetine"],
+        )
+
+        deactivated = self.client.patch(
+            "/api/medication",
+            json={
+                "patient_id": SECOND_DEMO_PATIENT_ID,
+                "medication_name": "fluoxetine",
+                "active": False,
+            },
+        )
+        self.assertEqual(deactivated.status_code, 200)
+        first_patient_after = self.client.get(
+            "/api/doctor/medications",
+            params={"patient_id": FIXED_PATIENT_ID},
+        ).json()["medications"]
+        second_patient_after = self.client.get(
+            "/api/doctor/medications",
+            params={"patient_id": SECOND_DEMO_PATIENT_ID},
+        ).json()["medications"]
+        self.assertEqual(first_patient_after[0]["is_active"], 1)
+        self.assertEqual(second_patient_after[0]["is_active"], 0)
+
+    def test_doctor_medication_endpoint_validates_patient_and_dose(self):
+        self.client.post("/api/auth/logout")
+        self.login("doctor")
+
+        invalid_requests = (
+            {
+                "patient_id": "another-patient",
+                "medication_name": "lexapro",
+                "dosage_value": 10,
+                "dosage_unit": "mg",
+            },
+            {
+                "medication_name": "unlisted medication",
+                "dosage_value": 10,
+                "dosage_unit": "mg",
+            },
+            {
+                "medication_name": "lexapro",
+                "dosage_value": 100,
+                "dosage_unit": "mg",
+            },
+            {
+                "medication_name": "lexapro",
+                "dosage_value": 10,
+                "dosage_unit": "ml",
+            },
+        )
+        for payload in invalid_requests:
+            with self.subTest(payload=payload):
+                response = self.client.post(
+                    "/api/doctor/medications", json=payload
+                )
+                self.assertIn(response.status_code, (404, 422))
+
+        unauthenticated = TestClient(create_app())
+        with unauthenticated:
+            response = unauthenticated.get(
+                "/api/doctor/medications",
+                params={"patient_id": FIXED_PATIENT_ID},
+            )
+        self.assertEqual(response.status_code, 401)
+
+    def test_doctor_cannot_add_inactive_medication(self):
+        database.update_prescription_dosage(
+            FIXED_PATIENT_ID, "lexapro", 10, "mg"
+        )
+        database.deactivate_prescription(FIXED_PATIENT_ID, "lexapro")
+        self.client.post("/api/auth/logout")
+        self.login("doctor")
+
+        response = self.client.post(
+            "/api/doctor/medications",
+            json={
+                "patient_id": FIXED_PATIENT_ID,
+                "medication_name": "lexapro",
+                "dosage_value": 15,
+                "dosage_unit": "mg",
+            },
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json(),
+            {"detail": "This medication is inactive and cannot be reactivated."},
+        )
 
     def test_patient_can_get_own_prescriptions_with_pagination(self):
         database.update_prescription_dosage(

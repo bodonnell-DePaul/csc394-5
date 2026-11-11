@@ -46,6 +46,10 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 | Patient | `patient2@example.com` | `PatientPassword456!` |
 | Doctor | `doctor@example.com` | `DoctorPassword123!` |
 
+The two patient demo accounts represent separate patients. In the clinician
+workspace, select a patient before adding or reviewing that patient's
+medications.
+
 At startup the server initializes the SQLite schema and creates any missing
 demo accounts. Passwords are stored as Argon2 hashes. Startup does not insert
 sample reports.
@@ -151,8 +155,13 @@ system.
 - `POST /api/symptom_report` creates a patient report.
 - `GET /api/symptom_report?limit=20&offset=0` lists patient reports.
 - `GET /api/symptom_report/summary` returns report counts.
-- `GET /api/doctor/dashboard?limit=20&offset=0` lists reports for clinicians.
-- `PATCH /api/doctor/reports/{report_id}` saves a clinician review.
+- `GET /api/doctor/patients` lists patients for the clinician portal.
+- `GET /api/doctor/dashboard?patient_id=...&limit=20&offset=0` lists a
+  selected patient's reports and summary for clinicians.
+- `PATCH /api/doctor/reports/{report_id}?patient_id=...` saves a review for the
+  selected patient.
+- `GET` and `POST /api/doctor/medications` list and add prescriptions for a
+  patient; `PATCH /api/medication` deactivates one.
 
 Invalid request bodies or query parameters return 422. Unauthenticated
 requests return 401, and role or patient access violations return 403.

@@ -15,13 +15,16 @@ from .database import (
     get_patient_profile,
     get_review_counts,
     get_report_summary,
+    list_patient_profiles,
     list_prescriptions,
     list_symptom_reports,
     save_symptom_report,
+    update_prescription_dosage,
     update_report_review,
 )
 from ..middleware.schemas import (
     DoctorReviewUpdate,
+    DosageUpdateRequest,
     MedicationStatusUpdateRequest,
     SymptomDetail,
     SymptomReportRequest,
@@ -188,7 +191,11 @@ def update_medication_status(
     payload: MedicationStatusUpdateRequest,
     _user: dict = Depends(require_doctor_user),
 ) -> dict[str, object]:
-    require_demo_patient(payload.patient_id)
+    if get_patient_profile(payload.patient_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Patient not found.",
+        )
     if payload.active:
         raise HTTPException(
             status_code=422,
@@ -212,25 +219,85 @@ def update_medication_status(
 
 
 # Demo doctor endpoints protected by role-based authorization.
+@router.get("/api/doctor/medications")
+def get_patient_medications(
+    patient_id: str = Query(...),
+    _user: dict = Depends(require_doctor_user),
+) -> dict[str, list[dict[str, object]]]:
+    if get_patient_profile(patient_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Patient not found.",
+        )
+    medications, _total = list_prescriptions(patient_id, 100, 0)
+    return {"medications": medications}
+
+
+@router.post("/api/doctor/medications", status_code=status.HTTP_201_CREATED)
+def add_patient_medication(
+    payload: DosageUpdateRequest,
+    _user: dict = Depends(require_doctor_user),
+) -> dict[str, object]:
+    if get_patient_profile(payload.patient_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Patient not found.",
+        )
+
+    medications, _total = list_prescriptions(payload.patient_id, 100, 0)
+    existing = next(
+        (
+            medication
+            for medication in medications
+            if medication["medication_name"] == payload.medication_name
+        ),
+        None,
+    )
+    if existing and not existing["is_active"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This medication is inactive and cannot be reactivated.",
+        )
+
+    medication = update_prescription_dosage(
+        payload.patient_id,
+        payload.medication_name,
+        payload.dosage_value,
+        payload.dosage_unit,
+    )
+    return {
+        "message": "Patient medication saved.",
+        "medication": {**medication, "is_active": True},
+    }
+
+
+@router.get("/api/doctor/patients")
+def get_doctor_patients(
+    _user: dict = Depends(require_doctor_user),
+) -> dict[str, list[dict[str, object]]]:
+    return {"patients": list_patient_profiles()}
+
+
 @router.get("/api/doctor/dashboard")
 def get_doctor_dashboard(
+    patient_id: str = Query(...),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     _user: dict = Depends(require_doctor_user),
 ) -> dict[str, object]:
-    reports, total = list_symptom_reports(
-        FIXED_PATIENT_ID, limit, offset, include_doctor_notes=True
-    )
-    patient = get_patient_profile(FIXED_PATIENT_ID)
+    patient = get_patient_profile(patient_id)
     if patient is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Patient account not found.",
         )
+    reports, total = list_symptom_reports(
+        patient_id, limit, offset, include_doctor_notes=True
+    )
     return {
         "patient": patient,
-        "summary": get_report_summary(FIXED_PATIENT_ID),
-        "review_counts": get_review_counts(FIXED_PATIENT_ID),
+        "summary": get_report_summary(patient_id),
+        "review_counts": get_review_counts(patient_id),
         "reports": reports,
         "page": {"limit": limit, "offset": offset, "total": total},
     }
@@ -240,10 +307,16 @@ def get_doctor_dashboard(
 def review_symptom_report(
     report_id: int,
     payload: DoctorReviewUpdate,
+    patient_id: str = Query(...),
     _user: dict = Depends(require_doctor_user),
 ) -> dict[str, object]:
+    if get_patient_profile(patient_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Patient not found.",
+        )
     report = update_report_review(
-        report_id, FIXED_PATIENT_ID, payload.review_status, payload.doctor_note
+        report_id, patient_id, payload.review_status, payload.doctor_note
     )
     if report is None:
         raise HTTPException(

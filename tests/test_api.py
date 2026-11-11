@@ -53,6 +53,28 @@ class ApiIntegrationTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"symptoms": AVAILABLE_SYMPTOMS})
+        self.assertTrue({
+            "Acid reflux",
+            "Change in appetite",
+            "Congestion",
+            "Cough",
+            "Depression",
+            "Diarrhea",
+            "Dizziness",
+            "Fainting",
+            "Fatigue",
+            "Fever",
+            "Flatulence",
+            "Hair loss",
+            "Hearing impairment",
+            "Indigestion",
+            "Seizure",
+            "Sleepiness",
+            "Thirst",
+            "Vomiting",
+            "Vision impairment",
+        }.issubset(AVAILABLE_SYMPTOMS))
+        self.assertEqual(len(AVAILABLE_SYMPTOMS), len(set(AVAILABLE_SYMPTOMS)))
 
     def test_available_medications_endpoint_returns_supported_choices(self):
         response = self.client.get("/api/medications/")
