@@ -22,17 +22,25 @@ async function requestJson(url, options = {}) {
   return result;
 }
 
-function LoginForm({ onLogin, error }) {
+function LoginForm({ onLogin, error, onModeChange }) {
+  const [loginRole, setLoginRole] = useState('patient');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [doctorStaffId, setDoctorStaffId] = useState('');
   const [loading, setLoading] = useState(false);
+
+  function selectRole(role) {
+    setLoginRole(role);
+    setDoctorStaffId('');
+    onModeChange();
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
     setLoading(true);
 
     try {
-      await onLogin(email, password);
+      await onLogin(email, password, loginRole === 'doctor' ? doctorStaffId : null);
     } finally {
       setLoading(false);
     }
@@ -42,7 +50,18 @@ function LoginForm({ onLogin, error }) {
     <main className="login-page">
       <form className="login-form" onSubmit={handleSubmit}>
         <h1>Healthwatch</h1>
-        <p>Sign in to access your patient dashboard.</p>
+        <p>{loginRole === 'doctor'
+          ? 'Doctor sign-in requires your assigned six-digit staff ID.'
+          : 'Sign in to access your patient dashboard.'}</p>
+
+        <div className="login-role-options" role="group" aria-label="Account type">
+          <button type="button" aria-pressed={loginRole === 'patient'}
+            className={loginRole === 'patient' ? 'selected' : ''}
+            onClick={() => selectRole('patient')}>Patient</button>
+          <button type="button" aria-pressed={loginRole === 'doctor'}
+            className={loginRole === 'doctor' ? 'selected' : ''}
+            onClick={() => selectRole('doctor')}>Doctor</button>
+        </div>
 
         <label htmlFor="login-email">Email</label>
         <input
@@ -63,6 +82,24 @@ function LoginForm({ onLogin, error }) {
           autoComplete="current-password"
           required
         />
+
+        {loginRole === 'doctor' && (
+          <>
+            <label htmlFor="login-doctor-staff-id">Doctor staff ID</label>
+            <input
+              id="login-doctor-staff-id"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              value={doctorStaffId}
+              onChange={(event) => setDoctorStaffId(event.target.value)}
+              autoComplete="off"
+              placeholder="Six-digit staff ID"
+              required
+            />
+          </>
+        )}
 
         {error && <p role="alert">{error}</p>}
 
@@ -1326,7 +1363,7 @@ function HealthwatchApp() {
     };
   }, []);
 
-  async function handleLogin(email, password) {
+  async function handleLogin(email, password, doctorStaffId) {
     setLoginError('');
 
     try {
@@ -1336,7 +1373,11 @@ function HealthwatchApp() {
           'Content-Type': 'application/json',
         },
         credentials: 'same-origin',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email,
+          password,
+          ...(doctorStaffId !== null ? { doctor_staff_id: doctorStaffId } : {}),
+        }),
       });
 
       setUser(result.user);
@@ -1370,6 +1411,7 @@ function HealthwatchApp() {
       <LoginForm
         onLogin={handleLogin}
         error={loginError}
+        onModeChange={() => setLoginError('')}
       />
     );
   }
