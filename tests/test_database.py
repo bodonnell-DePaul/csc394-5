@@ -71,6 +71,7 @@ class DatabaseTests(unittest.TestCase):
                 "password_hash": "stored-password-hash",
                 "role": "patient",
                 "patient_id": "patient-a",
+                "doctor_staff_id": None,
             },
         )
         self.assertIsNone(database.get_user_by_email("missing@example.com"))
