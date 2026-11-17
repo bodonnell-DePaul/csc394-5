@@ -225,6 +225,7 @@ class MedicationRouteTests(unittest.TestCase):
             email="medication-doctor@example.com",
             password_hash=password_hasher.hash("TestPassword123!"),
             role="doctor",
+            doctor_staff_id="518204",
         )
         database.create_user(
             email="medication-patient2@example.com",
@@ -241,7 +242,11 @@ class MedicationRouteTests(unittest.TestCase):
         email, password = credentials[role]
         response = self.client.post(
             "/api/auth/login",
-            json={"email": email, "password": password},
+            json={
+                "email": email,
+                "password": password,
+                **({"doctor_staff_id": "518204"} if role == "doctor" else {}),
+            },
         )
         self.assertEqual(response.status_code, 200)
 

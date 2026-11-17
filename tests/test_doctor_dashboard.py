@@ -36,7 +36,11 @@ class DoctorDashboardTests(unittest.TestCase):
 
         response = self.client.post(
             "/api/auth/login",
-            json={"email": email, "password": password},
+            json={
+                "email": email,
+                "password": password,
+                **({"doctor_staff_id": "742619"} if role == "doctor" else {}),
+            },
         )
         self.assertEqual(response.status_code, 200)
 

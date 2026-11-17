@@ -16,6 +16,7 @@ from ..config import (
 )
 
 from .database import (
+    assign_doctor_staff_id,
     create_user,
     create_session,
     delete_session,
@@ -50,6 +51,7 @@ DEMO_ACCOUNTS = (
         "password": "DoctorPassword123!",
         "role": "doctor",
         "patient_id": None,
+        "doctor_staff_id": "742619",
     },
 )
 
@@ -64,6 +66,14 @@ def seed_demo_accounts() -> None:
                 password_hash=hash_password(account["password"]),
                 role=account["role"],
                 patient_id=account["patient_id"],
+                doctor_staff_id=account.get("doctor_staff_id"),
+            )
+        elif (
+            account["role"] == "doctor"
+            and existing_user["doctor_staff_id"] is None
+        ):
+            assign_doctor_staff_id(
+                account["email"], account["doctor_staff_id"]
             )
         elif (
             account["role"] == "patient"
@@ -77,6 +87,7 @@ def seed_demo_accounts() -> None:
 class LoginRequest(BaseModel):
     email: str
     password: str
+    doctor_staff_id: str | None = None
 
 
 def hash_password(password: str) -> str:
@@ -99,9 +110,22 @@ SESSION_DURATION = 60 * 60 * 8  # 8 hours
 def login(payload: LoginRequest, response: Response):
     user = get_user_by_email(payload.email)
 
-    if not user or not verify_password(
+    valid_password = bool(user) and verify_password(
         payload.password, user["password_hash"]
-    ):
+    )
+    valid_staff_id = False
+    if user and user["role"] == "doctor":
+        valid_staff_id = bool(payload.doctor_staff_id) and bool(
+            user["doctor_staff_id"]
+        ) and secrets.compare_digest(
+            payload.doctor_staff_id.strip(), user["doctor_staff_id"]
+        )
+    elif user and user["role"] == "patient":
+        # A patient cannot use the doctor-specific sign-in form.
+        valid_staff_id = payload.doctor_staff_id is None
+
+    if not valid_password or not valid_staff_id:
+        # Do not reveal whether the password or assigned doctor ID was wrong.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",

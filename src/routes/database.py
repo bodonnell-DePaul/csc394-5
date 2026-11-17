@@ -2,6 +2,7 @@ import json
 import logging
 import sqlite3
 import hashlib
+import re
 from contextlib import closing
 from datetime import datetime, timezone
 from typing import Any
@@ -62,9 +63,20 @@ def init_db() -> None:
                 password_hash TEXT NOT NULL,
                 role TEXT NOT NULL
                     CHECK (role IN ('patient', 'doctor')),
-                patient_id TEXT
+                patient_id TEXT,
+                doctor_staff_id TEXT
             )
         """)
+        # Upgrade existing databases without losing any accounts or sessions.
+        user_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(users)")
+        }
+        if "doctor_staff_id" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN doctor_staff_id TEXT")
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_doctor_staff_id "
+            "ON users(doctor_staff_id) WHERE doctor_staff_id IS NOT NULL"
+        )
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS user_sessions (
@@ -296,26 +308,61 @@ def get_report_summary(patient_id: str) -> dict[str, Any]:
         "top_symptoms": top_symptoms,
     }
 
+def normalize_doctor_staff_id(doctor_staff_id: str) -> str:
+    """Require a six-digit demo staff ID, preserving leading zeroes."""
+    if not isinstance(doctor_staff_id, str):
+        raise ValueError("Doctor staff ID must be six digits.")
+    normalized = doctor_staff_id.strip()
+    if re.fullmatch(r"[0-9]{6}", normalized) is None:
+        raise ValueError("Doctor staff ID must be six digits.")
+    return normalized
+
+
 def create_user(
     email: str,
     password_hash: str,
     role: str = "patient",
     patient_id: str | None = None,
+    doctor_staff_id: str | None = None,
 ) -> int:
-    """Save a new user account and return its ID."""
+    """Save a user; new doctor accounts must have an assigned staff ID."""
     if role not in ("patient", "doctor"):
         raise ValueError("Invalid user role.")
+    if role == "doctor" and doctor_staff_id is None:
+        raise ValueError("Doctor accounts require a staff ID.")
+    if role == "patient" and doctor_staff_id is not None:
+        raise ValueError("Patient accounts cannot have doctor staff IDs.")
+    staff_id = (
+        normalize_doctor_staff_id(doctor_staff_id)
+        if doctor_staff_id is not None else None
+    )
 
     with closing(get_connection()) as conn:
         cursor = conn.execute(
             """
-            INSERT INTO users (email, password_hash, role, patient_id)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO users (email, password_hash, role, patient_id, doctor_staff_id)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (email.strip().lower(), password_hash, role, patient_id),
+            (email.strip().lower(), password_hash, role, patient_id, staff_id),
         )
         conn.commit()
         return cursor.lastrowid
+
+
+def assign_doctor_staff_id(email: str, doctor_staff_id: str) -> None:
+    """Provision an existing doctor once, including legacy accounts."""
+    normalized = normalize_doctor_staff_id(doctor_staff_id)
+    with closing(get_connection()) as conn:
+        cursor = conn.execute(
+            """
+            UPDATE users SET doctor_staff_id = ?
+            WHERE email = ? AND role = 'doctor' AND doctor_staff_id IS NULL
+            """,
+            (normalized, email.strip().lower()),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError("Doctor not found or already provisioned.")
+        conn.commit()
 
 
 def get_user_by_email(email: str) -> dict[str, Any] | None:
@@ -323,7 +370,7 @@ def get_user_by_email(email: str) -> dict[str, Any] | None:
     with closing(get_connection()) as conn:
         row = conn.execute(
             """
-            SELECT id, email, password_hash, role, patient_id
+            SELECT id, email, password_hash, role, patient_id, doctor_staff_id
             FROM users
             WHERE email = ?
             """,
