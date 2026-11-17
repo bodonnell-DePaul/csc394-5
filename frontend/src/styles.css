@@ -464,6 +464,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .login-form label { margin-top: 4px; color: #35495a; font-size: 12px; font-weight: 700; }
 .login-form input { width: 100%; min-height: 43px; padding: 10px 12px; border: 1px solid #dfe7eb; border-radius: 8px; }
 .login-form [role="alert"] { color: var(--danger); font-size: 12px; }
+.login-role-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 4px; }
+.login-form .login-role-options button { background: #eef4f5; color: #315266; border: 1px solid #cedfe2; }
+.login-form .login-role-options button:hover { background: #dcebed; }
+.login-form .login-role-options button.selected { background: #125f62; color: #fff; border-color: #125f62; }
+.login-form .login-role-options button.selected:hover { background: #0e5053; }
+.login-form input:focus-visible, .login-form button:focus-visible { outline: 3px solid #71b8ba; outline-offset: 2px; }
 .login-form button, button {
   min-height: 42px;
   padding: 10px 15px;
