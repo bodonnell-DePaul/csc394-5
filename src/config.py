@@ -1,5 +1,12 @@
 import os
 from pathlib import Path
+# Google OAuth configuration
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.environ.get(
+    "GOOGLE_REDIRECT_URI",
+    "http://localhost:8000/api/auth/google/callback",
+)
 
 _secure_cookie_setting = os.environ.get(
     "HEALTHWATCH_COOKIE_SECURE", "false"
