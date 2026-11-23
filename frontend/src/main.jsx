@@ -103,9 +103,30 @@ function LoginForm({ onLogin, error, onModeChange }) {
 
         {error && <p role="alert">{error}</p>}
 
+
         <button type="submit" disabled={loading}>
           {loading ? 'Signing in...' : 'Sign In'}
         </button>
+
+        {loginRole === 'patient' && (
+          <>
+            <div className="login-divider">
+              <span>or</span>
+            </div>
+
+            <button
+              type="button"
+              className="google-login-button"
+              disabled={loading}
+              onClick={() => {
+              window.location.assign('/api/auth/google');
+            }}
+          >
+            Continue with Google
+          </button>
+        </>
+)}
+
       </form>
     </main>
   );
@@ -161,7 +182,7 @@ function PatientDashboard({ user, onLogout }) {
     if (!user) return;
 
     let active = true;
-    
+
 
     async function loadDemo() {
       try {
@@ -318,7 +339,7 @@ function PatientDashboard({ user, onLogout }) {
       setSubmittingReport(false);
     }
   }
-  
+
   const patientEmail = patient?.email || user.email;
   const initials = patientEmail ? patientEmail.slice(0, 2).toUpperCase() : 'PT';
   const pageTitles = {

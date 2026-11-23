@@ -704,3 +704,32 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   .doctor-overview-reports { padding: 17px 14px; }
   .doctor-profile-medications { padding: 17px 14px; }
 }
+
+/* Patient Google OAuth login */
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #7a8992;
+  font-size: 12px;
+  text-align: center;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #dfe7eb;
+}
+
+.login-form .google-login-button {
+  background: #ffffff;
+  color: #20394a;
+  border: 1px solid #cedfe2;
+  font-weight: 600;
+}
+
+.login-form .google-login-button:hover {
+  background: #f2f7f7;
+}
