@@ -13,7 +13,7 @@ from urllib.parse import urlencode
 from fastapi import Request
 from fastapi.responses import RedirectResponse
 import httpx
-from authlib.jose import JsonWebKey, jwt
+from authlib.jose import JsonWebKey, JsonWebToken
 import hashlib
 import threading
 import time
@@ -337,14 +337,14 @@ def start_google_oauth():
     )
 
     return response
-def exchange_google_code(code: str) -> dict:
+
+def exchange_google_code(code: str, expected_nonce: str) -> dict:
     """Exchange a Google authorization code for a verified identity."""
 
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         raise RuntimeError("Google OAuth credentials are not configured.")
 
     with httpx.Client(timeout=10.0) as client:
-        # Exchange the authorization code for Google tokens.
         token_response = client.post(
             "https://oauth2.googleapis.com/token",
             data={
@@ -360,15 +360,16 @@ def exchange_google_code(code: str) -> dict:
 
         id_token = tokens["id_token"]
 
-        # Retrieve Google's public signing keys.
         keys_response = client.get(
             "https://www.googleapis.com/oauth2/v3/certs"
         )
         keys_response.raise_for_status()
         google_keys = JsonWebKey.import_key_set(keys_response.json())
 
-    # Verify the token's cryptographic signature.
-    claims = jwt.decode(
+    # Only accept Google's RS256 signing algorithm.
+    verifier = JsonWebToken(["RS256"])
+
+    claims = verifier.decode(
         id_token,
         google_keys,
         claims_options={
@@ -387,10 +388,13 @@ def exchange_google_code(code: str) -> dict:
             "sub": {"essential": True},
             "email": {"essential": True},
             "email_verified": {"essential": True},
+            "nonce": {
+                "essential": True,
+                "value": expected_nonce,
+            },
         },
     )
 
-    # Validate expiration and other configured claims.
     claims.validate()
 
     return {
@@ -398,6 +402,7 @@ def exchange_google_code(code: str) -> dict:
         "email": claims["email"],
         "email_verified": claims["email_verified"],
     }
+
 @router.get("/google/callback")
 def google_oauth_callback(
     request: Request,
@@ -444,7 +449,7 @@ def google_oauth_callback(
 
     # Exchange authorization code for verified Google identity.
     try:
-        google_identity = exchange_google_code(code)
+        google_identity = exchange_google_code(code, expected_nonce)
     except Exception:
         raise HTTPException(
             status_code=502,
