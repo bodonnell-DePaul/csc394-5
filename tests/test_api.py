@@ -7,7 +7,12 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from src.config import AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID
+from src.config import (
+    AVAILABLE_MEDICATIONS,
+    AVAILABLE_SYMPTOMS,
+    FIXED_PATIENT_ID,
+    SECOND_DEMO_PATIENT_ID,
+)
 from src.routes import database
 from src.routes.auth import password_hasher
 from src.routes import routes
@@ -53,6 +58,34 @@ class ApiIntegrationTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"symptoms": AVAILABLE_SYMPTOMS})
+        self.assertTrue({
+            "Acid reflux",
+            "Change in appetite",
+            "Congestion",
+            "Cough",
+            "Depression",
+            "Diarrhea",
+            "Dizziness",
+            "Fainting",
+            "Fatigue",
+            "Fever",
+            "Flatulence",
+            "Hair loss",
+            "Hearing impairment",
+            "Indigestion",
+            "Seizure",
+            "Sleepiness",
+            "Thirst",
+            "Vomiting",
+            "Vision impairment",
+        }.issubset(AVAILABLE_SYMPTOMS))
+        self.assertEqual(len(AVAILABLE_SYMPTOMS), len(set(AVAILABLE_SYMPTOMS)))
+
+    def test_available_medications_endpoint_returns_supported_choices(self):
+        response = self.client.get("/api/medications/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"medications": AVAILABLE_MEDICATIONS})
 
     def test_public_routes_return_expected_responses(self):
         index_response = self.client.get("/")
@@ -165,6 +198,120 @@ class ApiIntegrationTests(unittest.TestCase):
                 ],
             },
         )
+
+    def test_second_demo_patient_can_access_own_data_only(self):
+        self.client.post("/api/auth/logout")
+        login = self.client.post(
+            "/api/auth/login",
+            json={
+                "email": "patient2@example.com",
+                "password": "PatientPassword456!",
+            },
+        )
+        self.assertEqual(login.status_code, 200)
+
+        patient = self.client.get("/api/patient")
+        summary = self.client.get("/api/symptom_report/summary")
+        reports = self.client.get("/api/symptom_report")
+        medications = self.client.get("/api/medication")
+        created = self.client.post(
+            "/api/symptom_report",
+            json={"symptoms": ["Cough"], "notes": "Patient 2 report"},
+        )
+
+        self.assertEqual(patient.status_code, 200)
+        self.assertEqual(patient.json()["patient"]["id"], SECOND_DEMO_PATIENT_ID)
+        self.assertEqual(summary.status_code, 200)
+        self.assertEqual(reports.status_code, 200)
+        self.assertEqual(medications.status_code, 200)
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(
+            created.json()["report"]["patient_id"], SECOND_DEMO_PATIENT_ID
+        )
+        self.assertEqual(
+            self.client.get(
+                "/api/patient",
+                params={"patient_id": FIXED_PATIENT_ID},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(
+                "/api/symptom_report",
+                params={"patient_id": FIXED_PATIENT_ID},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/symptom_report",
+                json={
+                    "patient_id": FIXED_PATIENT_ID,
+                    "symptoms": ["Nausea"],
+                },
+            ).status_code,
+            403,
+        )
+        deleted = self.client.delete("/api/symptom_report")
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(deleted.json()["deleted_rows"], 1)
+
+    def test_symptom_report_accepts_details_and_associated_medication(self):
+        database.update_prescription_dosage(
+            FIXED_PATIENT_ID, "warfarin", 3, "mg"
+        )
+        response = self.client.post(
+            "/api/symptom_report",
+            json={
+                "symptoms": [
+                    {
+                        "name": "Headache",
+                        "severity": 7,
+                        "location": "left temple",
+                    }
+                ],
+                "associated_medication": "lexapro",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        report = response.json()["report"]
+        self.assertEqual(
+            report["symptoms"],
+            [{"name": "Headache", "severity": 7, "location": "left temple"}],
+        )
+        self.assertEqual(report["associated_medication"], "Lexapro")
+        self.assertEqual(
+            report["prescription_snapshot"],
+            [
+                {
+                    "medication_name": "warfarin",
+                    "dosage_value": 3,
+                    "dosage_unit": "mg",
+                }
+            ],
+        )
+
+        listed = self.client.get("/api/symptom_report").json()["reports"]
+        self.assertEqual(listed[0]["associated_medication"], "Lexapro")
+        self.assertEqual(
+            listed[0]["prescription_snapshot"],
+            report["prescription_snapshot"],
+        )
+
+    def test_symptom_report_rejects_invalid_details_or_medication(self):
+        for payload in (
+            {
+                "symptoms": [{"name": "Headache", "severity": 11}],
+            },
+            {
+                "symptoms": ["Headache"],
+                "associated_medication": "not supported",
+            },
+        ):
+            with self.subTest(payload=payload):
+                response = self.client.post("/api/symptom_report", json=payload)
+                self.assertEqual(response.status_code, 422)
 
     def test_patient_profile_and_summary_reject_unknown_patient(self):
         profile = self.client.get("/api/patient", params={"patient_id": "unknown"})

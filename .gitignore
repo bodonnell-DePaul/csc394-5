@@ -17,3 +17,7 @@ src/data/healthwatch.db-wal
 src/data/healthwatch.local.db
 src/data/healthwatch.local.db-shm
 src/data/healthwatch.local.db-wal
+# Local environment variables and secrets
+.env
+.env.*
+!.env.example

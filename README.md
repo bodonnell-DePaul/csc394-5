@@ -40,15 +40,30 @@ python -m uvicorn src.server.main:app --host 127.0.0.1 --port 8000
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
-| Role | Email | Password |
-|---|---|---|
-| Patient | `patient@example.com` | `PatientPassword123!` |
-| Patient | `patient2@example.com` | `PatientPassword456!` |
-| Doctor | `doctor@example.com` | `DoctorPassword123!` |
+| Role | Email | Password | Doctor staff ID |
+|---|---|---|---|
+| Patient | `patient@example.com` | `PatientPassword123!` | Not required |
+| Patient | `patient2@example.com` | `PatientPassword456!` | Not required |
+| Doctor | `doctor@example.com` | `DoctorPassword123!` | `742619` |
+
+The two patient demo accounts represent separate patients. In the clinician
+workspace, select a patient before adding or reviewing that patient's
+medications.
 
 At startup the server initializes the SQLite schema and creates any missing
-demo accounts. Passwords are stored as Argon2 hashes. Startup does not insert
+demo accounts. Passwords are stored as Argon2 hashes. The existing demo doctor
+account is assigned its staff ID if it did not have one. Startup does not insert
 sample reports.
+
+Select **Doctor** on the sign-in screen to enter the six-digit staff ID as well
+as email and password. Patient sign-in still uses only email and password. The
+backend checks the doctor ID against the signed-in account before issuing a
+session; entering an ID on the patient sign-in path is rejected. Non-demo
+doctor accounts need a staff ID provisioned before they can sign in.
+
+**Security limitation:** The doctor ID is an internal demo identifier, not a
+verified medical license, a secret, or multi-factor authentication. Demo
+credentials are intentionally shared in this README; use synthetic data only.
 
 ## Run checks locally
 
@@ -99,7 +114,7 @@ To create the Render service:
    returns `{"status":"ok"}`. Use the demo accounts listed above; only use
    synthetic demo data.
 
-<<<<<<< HEAD
+HEAD
 The existing [GitHub Actions workflow](./.github/workflows/ci.yml) runs backend
 tests and frontend lint/build on pushes and pull requests to `main`. Render is
 configured to deploy a `main` commit only after its GitHub checks pass. No
@@ -111,8 +126,6 @@ The persistent disk keeps the SQLite file across deploys and service restarts,
 but it is not a backup and this SQLite setup is for one demo instance only.
 This app retains fixed, documented demo credentials and is not production
 ready. Never enter real patient information.
-=======
->>>>>>> aacb78101429d9b994b4da77c98b9d38126aa845
 
 ## Local database maintenance
 
@@ -151,8 +164,13 @@ system.
 - `POST /api/symptom_report` creates a patient report.
 - `GET /api/symptom_report?limit=20&offset=0` lists patient reports.
 - `GET /api/symptom_report/summary` returns report counts.
-- `GET /api/doctor/dashboard?limit=20&offset=0` lists reports for clinicians.
-- `PATCH /api/doctor/reports/{report_id}` saves a clinician review.
+- `GET /api/doctor/patients` lists patients for the clinician portal.
+- `GET /api/doctor/dashboard?patient_id=...&limit=20&offset=0` lists a
+  selected patient's reports and summary for clinicians.
+- `PATCH /api/doctor/reports/{report_id}?patient_id=...` saves a review for the
+  selected patient.
+- `GET` and `POST /api/doctor/medications` list and add prescriptions for a
+  patient; `PATCH /api/medication` deactivates one.
 
 Invalid request bodies or query parameters return 422. Unauthenticated
 requests return 401, and role or patient access violations return 403.

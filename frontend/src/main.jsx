@@ -2,8 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
-async function requestJson(url, options) {
-  const response = await fetch(url, options);
+const DOCTOR_SELECTED_PATIENT_KEY = 'healthwatch.doctor.selectedPatientId';
+const DOCTOR_ACTIVE_SECTION_KEY = 'healthwatch.doctor.activeSection';
+
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: 'same-origin',
+    ...options,
+  });
   const result = await response.json();
 
   if (!response.ok) {
@@ -16,17 +22,25 @@ async function requestJson(url, options) {
   return result;
 }
 
-function LoginForm({ onLogin, error }) {
+function LoginForm({ onLogin, error, onModeChange }) {
+  const [loginRole, setLoginRole] = useState('patient');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [doctorStaffId, setDoctorStaffId] = useState('');
   const [loading, setLoading] = useState(false);
+
+  function selectRole(role) {
+    setLoginRole(role);
+    setDoctorStaffId('');
+    onModeChange();
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
     setLoading(true);
 
     try {
-      await onLogin(email, password);
+      await onLogin(email, password, loginRole === 'doctor' ? doctorStaffId : null);
     } finally {
       setLoading(false);
     }
@@ -36,7 +50,18 @@ function LoginForm({ onLogin, error }) {
     <main className="login-page">
       <form className="login-form" onSubmit={handleSubmit}>
         <h1>Healthwatch</h1>
-        <p>Sign in to access your patient dashboard.</p>
+        <p>{loginRole === 'doctor'
+          ? 'Doctor sign-in requires your assigned six-digit staff ID.'
+          : 'Sign in to access your patient dashboard.'}</p>
+
+        <div className="login-role-options" role="group" aria-label="Account type">
+          <button type="button" aria-pressed={loginRole === 'patient'}
+            className={loginRole === 'patient' ? 'selected' : ''}
+            onClick={() => selectRole('patient')}>Patient</button>
+          <button type="button" aria-pressed={loginRole === 'doctor'}
+            className={loginRole === 'doctor' ? 'selected' : ''}
+            onClick={() => selectRole('doctor')}>Doctor</button>
+        </div>
 
         <label htmlFor="login-email">Email</label>
         <input
@@ -58,11 +83,50 @@ function LoginForm({ onLogin, error }) {
           required
         />
 
+        {loginRole === 'doctor' && (
+          <>
+            <label htmlFor="login-doctor-staff-id">Doctor staff ID</label>
+            <input
+              id="login-doctor-staff-id"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              value={doctorStaffId}
+              onChange={(event) => setDoctorStaffId(event.target.value)}
+              autoComplete="off"
+              placeholder="Six-digit staff ID"
+              required
+            />
+          </>
+        )}
+
         {error && <p role="alert">{error}</p>}
+
 
         <button type="submit" disabled={loading}>
           {loading ? 'Signing in...' : 'Sign In'}
         </button>
+
+        {loginRole === 'patient' && (
+          <>
+            <div className="login-divider">
+              <span>or</span>
+            </div>
+
+            <button
+              type="button"
+              className="google-login-button"
+              disabled={loading}
+              onClick={() => {
+              window.location.assign('/api/auth/google');
+            }}
+          >
+            Continue with Google
+          </button>
+        </>
+)}
+
       </form>
     </main>
   );
@@ -78,13 +142,17 @@ function PatientDashboard({ user, onLogout }) {
   const [symptoms, setSymptoms] = useState([]);
   const [symptomChoice, setSymptomChoice] = useState('');
   const [selectedSymptoms, setSelectedSymptoms] = useState([]);
+  const [medications, setMedications] = useState([]);
+  const [loadingMedications, setLoadingMedications] = useState(false);
+  const [selectedMedication, setSelectedMedication] = useState('');
   const [reports, setReports] = useState([]);
   const [reportTotal, setReportTotal] = useState(0);
   const [reportSearch, setReportSearch] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
   const [summary, setSummary] = useState(null);
   const [status, setStatus] = useState(null);
-
+  const [submissionNotice, setSubmissionNotice] = useState(null);
+  const [submittingReport, setSubmittingReport] = useState(false);
 
   async function refreshHistory() {
     const [reportResult, summaryResult] = await Promise.all([
@@ -114,11 +182,16 @@ function PatientDashboard({ user, onLogout }) {
     if (!user) return;
 
     let active = true;
-    
+
 
     async function loadDemo() {
       try {
-        const [patientResult, symptomsResult, reportResult, summaryResult] =
+        const [
+          patientResult,
+          symptomsResult,
+          reportResult,
+          summaryResult,
+        ] =
           await Promise.all([
             requestJson('/api/patient'),
             requestJson('/api/symptoms'),
@@ -146,6 +219,35 @@ function PatientDashboard({ user, onLogout }) {
     };
   }, [user]);
 
+  useEffect(() => {
+    if (!user || activePage !== 'log') return undefined;
+
+    let active = true;
+    setLoadingMedications(true);
+    requestJson('/api/medication?limit=100&offset=0')
+      .then((result) => {
+        if (active) {
+          setMedications(
+            result.medications
+              .filter((medication) => medication.is_active)
+              .map((medication) => medication.medication_name),
+          );
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setStatus({ message: error.message, isError: true });
+        }
+      })
+      .finally(() => {
+        if (active) setLoadingMedications(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activePage, user]);
+
   function navigateTo(page) {
     setActivePage(page);
     setStatus(null);
@@ -169,19 +271,35 @@ function PatientDashboard({ user, onLogout }) {
     }
   }
 
+  function updateSymptomDetail(index, key, value) {
+    setSelectedSymptoms((current) =>
+      current.map((symptom, symptomIndex) =>
+        symptomIndex === index ? { ...symptom, [key]: value } : symptom
+      )
+    );
+  }
+
+  function removeSymptom(index) {
+    setSelectedSymptoms((current) =>
+      current.filter((_, symptomIndex) => symptomIndex !== index)
+    );
+  }
+
   async function submitReport(event) {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
 
     if (!selectedSymptoms.length) {
-      setStatus({
-        message: 'Please select at least one symptom.',
+      setSubmissionNotice({
+        title: 'Choose a symptom',
+        message: 'Please select at least one symptom before submitting.',
         isError: true,
       });
       return;
     }
 
+    setSubmittingReport(true);
     try {
       await requestJson('/api/symptom_report', {
         method: 'POST',
@@ -189,19 +307,39 @@ function PatientDashboard({ user, onLogout }) {
         body: JSON.stringify({
           symptoms: selectedSymptoms,
           notes: formData.get('notes'),
+          associated_medication: selectedMedication || null,
         }),
       });
 
       form.reset();
       setSymptomChoice('');
       setSelectedSymptoms([]);
-      setStatus({ message: 'Symptom report saved.', isError: false });
-      await refreshHistory();
+      setSelectedMedication('');
+      setSubmissionNotice({
+        title: 'Report submitted',
+        message: 'Your symptom report was saved successfully.',
+        isError: false,
+      });
+      try {
+        await refreshHistory();
+      } catch (error) {
+        setSubmissionNotice({
+          title: 'Report submitted',
+          message: `Your report was saved, but your history could not be refreshed: ${error.message}`,
+          isError: false,
+        });
+      }
     } catch (error) {
-      setStatus({ message: error.message, isError: true });
+      setSubmissionNotice({
+        title: 'Report not submitted',
+        message: error.message,
+        isError: true,
+      });
+    } finally {
+      setSubmittingReport(false);
     }
   }
-  
+
   const patientEmail = patient?.email || user.email;
   const initials = patientEmail ? patientEmail.slice(0, 2).toUpperCase() : 'PT';
   const pageTitles = {
@@ -212,8 +350,13 @@ function PatientDashboard({ user, onLogout }) {
   const visibleReports = reports.filter((report) => {
     const query = reportSearch.trim().toLowerCase();
     return !query
-      || report.symptoms.some((symptom) => symptom.toLowerCase().includes(query))
-      || report.notes.toLowerCase().includes(query);
+      || report.symptoms.some((symptom) => {
+        const name = typeof symptom === 'object' ? symptom.name : symptom;
+        return name?.toLowerCase().includes(query);
+      })
+      || (report.associated_medication
+        && report.associated_medication.toLowerCase().includes(query))
+      || (report.notes || '').toLowerCase().includes(query);
   });
 
   function renderReport(report) {
@@ -224,9 +367,21 @@ function PatientDashboard({ user, onLogout }) {
           <time className="meta" dateTime={report.submitted_at}>
             {new Date(report.submitted_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
           </time>
+          {report.associated_medication && (
+            <span className="medication-badge">Med: {report.associated_medication}</span>
+          )}
         </div>
         <div className="pill-list">
-          {report.symptoms.map((symptom) => <span className="pill" key={symptom}>{symptom}</span>)}
+          {report.symptoms.map((symptom, index) => {
+            const isObject = typeof symptom === 'object';
+            const name = isObject ? symptom.name : symptom;
+            return (
+              <span className="pill" key={`${name}-${index}`}>
+                {name}
+                {isObject && ` (Severity: ${symptom.severity}/10)`}
+              </span>
+            );
+          })}
         </div>
         {report.notes && <p className="report-notes">{report.notes}</p>}
       </article>
@@ -349,8 +504,11 @@ function PatientDashboard({ user, onLogout }) {
                     onChange={(event) => {
                       const symptom = event.target.value;
                       setSymptomChoice('');
-                      if (symptom && !selectedSymptoms.includes(symptom)) {
-                        setSelectedSymptoms([...selectedSymptoms, symptom]);
+                      if (symptom && !selectedSymptoms.some((item) => item.name === symptom)) {
+                        setSelectedSymptoms([
+                          ...selectedSymptoms,
+                          { name: symptom, severity: 5 },
+                        ]);
                       }
                     }}
                   >
@@ -360,21 +518,61 @@ function PatientDashboard({ user, onLogout }) {
                     ))}
                   </select>
                   {selectedSymptoms.length > 0 && (
-                    <ul className="selected-symptoms" aria-label="Selected symptoms">
-                      {selectedSymptoms.map((symptom) => (
-                        <li className="selected-symptom" key={symptom}>
-                          <span>{symptom}</span>
-                          <button
-                            type="button"
-                            className="remove-symptom"
-                            aria-label={`Remove ${symptom}`}
-                            onClick={() => setSelectedSymptoms(selectedSymptoms.filter((item) => item !== symptom))}
-                          >Remove</button>
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="selected-symptoms-management">
+                      <span className="field-hint">Set the severity for each symptom.</span>
+                      <ul className="selected-symptoms" aria-label="Selected symptoms">
+                        {selectedSymptoms.map((symptom, index) => (
+                          <li className="selected-symptom-card" key={symptom.name}>
+                            <strong>{symptom.name}</strong>
+                            <button
+                              type="button"
+                              className="remove-symptom"
+                              aria-label={`Remove ${symptom.name}`}
+                              onClick={() => removeSymptom(index)}
+                            >Remove</button>
+                            <label htmlFor={`severity-${index}`}>
+                              Severity: {symptom.severity}/10
+                            </label>
+                            <input
+                              id={`severity-${index}`}
+                              type="range"
+                              min="1"
+                              max="10"
+                              value={symptom.severity}
+                              onChange={(event) => updateSymptomDetail(
+                                index,
+                                'severity',
+                                Number(event.target.value),
+                              )}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
                   <span className="field-hint">Add as many as you need.</span>
+                </div>
+                <div className="field">
+                  <label className="field-label" htmlFor="medication-select">
+                    Associated medication <span>(optional)</span>
+                  </label>
+                  <select
+                    id="medication-select"
+                    value={selectedMedication}
+                    onChange={(event) => setSelectedMedication(event.target.value)}
+                    disabled={loadingMedications}
+                  >
+                    <option value="">
+                      {loadingMedications
+                        ? 'Loading your medications…'
+                        : medications.length
+                          ? 'No associated medication'
+                          : 'No active medications available'}
+                    </option>
+                    {medications.map((medication) => (
+                      <option key={medication} value={medication}>{medication}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="field">
                   <label className="field-label" htmlFor="report-notes">Anything else you’d like us to know? <span>(optional)</span></label>
@@ -389,7 +587,10 @@ function PatientDashboard({ user, onLogout }) {
                   <span className="field-hint">Please don’t use this form for emergencies.</span>
                 </div>
                 <div className="report-submit">
-                  <button type="submit"><span aria-hidden="true">＋</span> Save symptom report</button>
+                  <button type="submit" disabled={submittingReport}>
+                    <span aria-hidden="true">＋</span>
+                    {submittingReport ? 'Saving report…' : 'Save symptom report'}
+                  </button>
                   <span className="privacy-note"><span aria-hidden="true">▣</span> Only you and your care team can see this</span>
                 </div>
                 <div
@@ -410,10 +611,10 @@ function PatientDashboard({ user, onLogout }) {
                   <button type="button" className="refresh-button" onClick={() => refreshHistory().catch((error) => setStatus({ message: error.message, isError: true }))}>Refresh</button>
                 </div>
               </div>
-              <p className="section-description">Search reports by symptom or by details in the notes you shared.</p>
+              <p className="section-description">Search reports by symptom, medication, or details in the notes you shared.</p>
               <label className="search-field">
                 <span aria-hidden="true">⌕</span>
-                <input type="search" value={reportSearch} onChange={(event) => setReportSearch(event.target.value)} placeholder="Search symptoms or notes" aria-label="Search reports by symptom or notes" />
+                <input type="search" value={reportSearch} onChange={(event) => setReportSearch(event.target.value)} placeholder="Search symptoms, medications, or notes" aria-label="Search reports by symptom, medication, or notes" />
                 {reportSearch && <button type="button" onClick={() => setReportSearch('')} aria-label="Clear search">Clear</button>}
               </label>
               <p className="search-hint">Search the reports currently loaded. Load older reports to include earlier entries.</p>
@@ -440,6 +641,38 @@ function PatientDashboard({ user, onLogout }) {
           <footer className="portal-footer">Healthwatch <span>·</span> Your information is private and secure.</footer>
         </main>
       </div>
+      {submissionNotice && (
+        <div
+          className="submission-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setSubmissionNotice(null);
+            }
+          }}
+        >
+          <section
+            className={`submission-dialog ${submissionNotice.isError ? 'error' : 'success'}`}
+            role={submissionNotice.isError ? 'alertdialog' : 'dialog'}
+            aria-modal="true"
+            aria-labelledby="submission-dialog-title"
+            aria-describedby="submission-dialog-message"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setSubmissionNotice(null);
+              }
+            }}
+          >
+            <div className="submission-dialog-icon" aria-hidden="true">
+              {submissionNotice.isError ? '!' : '✓'}
+            </div>
+            <h2 id="submission-dialog-title">{submissionNotice.title}</h2>
+            <p id="submission-dialog-message">{submissionNotice.message}</p>
+            <button type="button" autoFocus onClick={() => setSubmissionNotice(null)}>
+              Close
+            </button>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -456,7 +689,27 @@ function Stat({ label, value }) {
 
 
 function DoctorDashboard({ user, onLogout }) {
+  const [selectedPatientId, setSelectedPatientId] = useState(
+    () => window.sessionStorage.getItem(DOCTOR_SELECTED_PATIENT_KEY) || '',
+  );
+  const [activeSection, setActiveSection] = useState(() => {
+    const savedPatientId = window.sessionStorage.getItem(DOCTOR_SELECTED_PATIENT_KEY);
+    const savedSection = window.sessionStorage.getItem(DOCTOR_ACTIVE_SECTION_KEY);
+    if (!savedPatientId) return 'patients';
+    return ['profile', 'reports', 'medications'].includes(savedSection)
+      ? savedSection
+      : 'profile';
+  });
   const [dashboard, setDashboard] = useState(null);
+  const [patients, setPatients] = useState([]);
+  const [patientSearch, setPatientSearch] = useState('');
+  const [loadingPatients, setLoadingPatients] = useState(true);
+  const [availableMedications, setAvailableMedications] = useState([]);
+  const [patientMedications, setPatientMedications] = useState([]);
+  const [selectedMedication, setSelectedMedication] = useState('');
+  const [dosageValue, setDosageValue] = useState('');
+  const [savingMedication, setSavingMedication] = useState(false);
+  const [medicationNotice, setMedicationNotice] = useState(null);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [drafts, setDrafts] = useState({});
@@ -465,8 +718,23 @@ function DoctorDashboard({ user, onLogout }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  async function loadDashboard({ offset = 0, append = false } = {}) {
-    const data = await requestJson(`/api/doctor/dashboard?limit=20&offset=${offset}`);
+  useEffect(() => {
+    if (selectedPatientId) {
+      window.sessionStorage.setItem(DOCTOR_SELECTED_PATIENT_KEY, selectedPatientId);
+    } else {
+      window.sessionStorage.removeItem(DOCTOR_SELECTED_PATIENT_KEY);
+    }
+    window.sessionStorage.setItem(DOCTOR_ACTIVE_SECTION_KEY, activeSection);
+  }, [activeSection, selectedPatientId]);
+
+  async function loadDashboard({
+    patientId = selectedPatientId,
+    offset = 0,
+    append = false,
+  } = {}) {
+    const data = await requestJson(
+      `/api/doctor/dashboard?patient_id=${encodeURIComponent(patientId)}&limit=20&offset=${offset}`,
+    );
     setDashboard((current) => append && current
       ? { ...data, reports: [...current.reports, ...data.reports] }
       : data);
@@ -474,11 +742,102 @@ function DoctorDashboard({ user, onLogout }) {
 
   useEffect(() => {
     let active = true;
-    requestJson('/api/doctor/dashboard?limit=20&offset=0')
-      .then((data) => { if (active) setDashboard(data); })
-      .catch((error) => { if (active) setMessage(error.message); });
+    Promise.all([
+      requestJson('/api/medications/'),
+      requestJson('/api/doctor/patients'),
+    ])
+      .then(([availableMedicationData, patientData]) => {
+        if (!active) return;
+        setAvailableMedications(availableMedicationData.medications);
+        setPatients(patientData.patients);
+        const savedPatientId = window.sessionStorage.getItem(DOCTOR_SELECTED_PATIENT_KEY);
+        if (savedPatientId && !patientData.patients.some((patient) => patient.id === savedPatientId)) {
+          window.sessionStorage.removeItem(DOCTOR_SELECTED_PATIENT_KEY);
+          setSelectedPatientId('');
+          setActiveSection('patients');
+        }
+      })
+      .catch((error) => { if (active) setMessage(error.message); })
+      .finally(() => { if (active) setLoadingPatients(false); });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!selectedPatientId) {
+      setDashboard(null);
+      setPatientMedications([]);
+      return undefined;
+    }
+
+    let active = true;
+    setDashboard(null);
+    setPatientMedications([]);
+    setDrafts({});
+    setSelectedMedication('');
+    setDosageValue('');
+    setFilter('all');
+    setSearch('');
+    Promise.all([
+      requestJson(
+        `/api/doctor/dashboard?patient_id=${encodeURIComponent(selectedPatientId)}&limit=20&offset=0`,
+      ),
+      requestJson(
+        `/api/doctor/medications?patient_id=${encodeURIComponent(selectedPatientId)}`,
+      ),
+    ])
+      .then(([dashboardResult, medicationResult]) => {
+        if (!active) return;
+        setDashboard(dashboardResult);
+        setPatientMedications(medicationResult.medications);
+      })
+      .catch((error) => {
+        if (active) setMessage(error.message);
+      });
+    return () => { active = false; };
+  }, [selectedPatientId]);
+
+  async function addMedication(event) {
+    event.preventDefault();
+    if (!selectedPatientId) return;
+
+    setSavingMedication(true);
+    setMessage('');
+    try {
+      const result = await requestJson('/api/doctor/medications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patient_id: selectedPatientId,
+          medication_name: selectedMedication,
+          dosage_value: Number(dosageValue),
+          dosage_unit: 'mg',
+        }),
+      });
+      setPatientMedications((current) => [
+        ...current.filter(
+          (medication) =>
+            medication.medication_name !== result.medication.medication_name,
+        ),
+        result.medication,
+      ]);
+      setSelectedMedication('');
+      setDosageValue('');
+      const patient = patients.find((item) => item.id === selectedPatientId);
+      setMedicationNotice({
+        title: 'Medication saved',
+        message: `${selectedMedication} (${dosageValue} mg) was saved for ${patient?.email ?? 'the patient'}.`,
+        isError: false,
+      });
+    } catch (error) {
+      setMedicationNotice({
+        title: 'Medication not saved',
+        message: error.message,
+        isError: true,
+      });
+    } finally {
+      setSavingMedication(false);
+    }
+  }
 
   async function refreshDashboard() {
     setRefreshing(true);
@@ -497,7 +856,11 @@ function DoctorDashboard({ user, onLogout }) {
     setLoadingMore(true);
     setMessage('');
     try {
-      await loadDashboard({ offset: dashboard.reports.length, append: true });
+      await loadDashboard({
+        patientId: selectedPatientId,
+        offset: dashboard.reports.length,
+        append: true,
+      });
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -509,14 +872,17 @@ function DoctorDashboard({ user, onLogout }) {
     setBusyId(report.id);
     setMessage('');
     try {
-      const result = await requestJson(`/api/doctor/reports/${report.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          review_status: reviewStatus,
-          doctor_note: drafts[report.id] ?? report.doctor_note ?? '',
-        }),
-      });
+      const result = await requestJson(
+        `/api/doctor/reports/${report.id}?patient_id=${encodeURIComponent(selectedPatientId)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            review_status: reviewStatus,
+            doctor_note: drafts[report.id] ?? report.doctor_note ?? '',
+          }),
+        },
+      );
       setDashboard((current) => {
         if (!current) return current;
         const previousStatus = report.review_status;
@@ -546,35 +912,342 @@ function DoctorDashboard({ user, onLogout }) {
     }
   }
 
+  async function deactivateMedication(medication) {
+    const patient = patients.find((item) => item.id === selectedPatientId);
+    if (!patient || !window.confirm(
+      `Deactivate ${medication.medication_name} for ${patient.email}?`,
+    )) {
+      return;
+    }
+
+    setSavingMedication(true);
+    setMessage('');
+    try {
+      const result = await requestJson('/api/medication', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patient_id: selectedPatientId,
+          medication_name: medication.medication_name,
+          active: false,
+        }),
+      });
+      setPatientMedications((current) => current.map((item) => (
+        item.medication_name === medication.medication_name
+          ? { ...item, is_active: 0 }
+          : item
+      )));
+      setMessage(result.message);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setSavingMedication(false);
+    }
+  }
+
   const displayed = (dashboard?.reports ?? []).filter((report) => {
     const matchesStatus = filter === 'all' || report.review_status === filter;
     const query = search.trim().toLowerCase();
     const matchesSearch = !query
-      || report.symptoms.some((symptom) => symptom.toLowerCase().includes(query))
-      || report.notes.toLowerCase().includes(query)
+      || report.symptoms.some((symptom) => {
+        const name = typeof symptom === 'object' ? symptom.name : symptom;
+        return name?.toLowerCase().includes(query);
+      })
+      || (report.notes || '').toLowerCase().includes(query)
       || String(report.id).includes(query);
     return matchesStatus && matchesSearch;
   });
+  const sectionTitles = {
+    patients: 'Patients',
+    profile: 'Patient profile',
+    reports: 'Patient reports',
+    medications: 'Medications',
+  };
+  const selectedPatient = patients.find(
+    (patient) => patient.id === selectedPatientId,
+  );
+  const activeMedicationCount = patientMedications.filter(
+    (medication) => medication.is_active,
+  ).length;
+  const filteredPatients = patients.filter((patient) => {
+    const query = patientSearch.trim().toLowerCase();
+    return !query
+      || patient.email.toLowerCase().includes(query)
+      || patient.id.toLowerCase().includes(query);
+  });
+  const hasPatientContext = Boolean(selectedPatient && activeSection !== 'patients');
+
   return (
     <div className="doctor-portal">
-      <header className="doctor-topbar">
-        <a className="brand doctor-brand" href="#doctor-dashboard" aria-label="Healthwatch clinician portal">
-          <span className="brand-mark" aria-hidden="true">+</span>
-          <span>health<span className="brand-light">watch</span></span>
-        </a>
-        <div className="doctor-account">
-          <span className="doctor-role"><span aria-hidden="true">●</span> Clinician workspace</span>
-          <span className="doctor-email">{user.email}</span>
-          <button type="button" className="logout-button" onClick={onLogout}>Sign out</button>
-        </div>
-      </header>
-      <main className="doctor-content" id="doctor-dashboard">
+      <div className="doctor-shell">
+        <div className="doctor-workspace">
+          <header className="doctor-topbar">
+            <div className="doctor-topbar-brand" aria-label="Healthwatch clinician portal">
+              <span className="brand-mark" aria-hidden="true">+</span>
+              <span>health<span className="brand-light">watch</span></span>
+            </div>
+            <div className="doctor-breadcrumb">Clinician portal <span>/</span> {sectionTitles[activeSection]}</div>
+            <div className="doctor-account">
+              <span className="doctor-role"><span aria-hidden="true">●</span> Care team</span>
+              <span className="doctor-avatar" aria-hidden="true">{user.email.slice(0, 2).toUpperCase()}</span>
+              <span className="doctor-email">{user.email}</span>
+              <button type="button" className="logout-button" onClick={onLogout}>Sign out</button>
+            </div>
+          </header>
+          <main className="doctor-content" id="doctor-dashboard">
         <div className="doctor-heading">
-          <div><p className="eyebrow">PATIENT CARE</p><h1>Symptom review</h1><p>Review patient-submitted updates and record your follow-up notes.</p></div>
-          <button type="button" className="secondary-button" onClick={refreshDashboard} disabled={refreshing}>
-            {refreshing ? 'Refreshing…' : '↻ Refresh reports'}
-          </button>
+          <div>
+            <p className="eyebrow">{activeSection === 'patients' ? 'PATIENT DIRECTORY' : 'PATIENT CARE'}</p>
+            <h1>{sectionTitles[activeSection]}</h1>
+            <p>{activeSection === 'patients'
+              ? 'Find a patient to view their health profile, reports, and medications.'
+              : selectedPatient
+                ? `Health information for ${selectedPatient.email}.`
+                : 'Select a patient to review their health information.'}</p>
+          </div>
+          <div className="doctor-heading-actions">
+            {activeSection !== 'patients' && (
+              <button
+                type="button"
+                className="secondary-button doctor-back-button"
+                onClick={() => setActiveSection(activeSection === 'profile' ? 'patients' : 'profile')}
+              >
+                ← {activeSection === 'profile' ? 'All patients' : 'Patient profile'}
+              </button>
+            )}
+            {activeSection === 'reports' && (
+              <button type="button" className="secondary-button" onClick={refreshDashboard} disabled={refreshing || !selectedPatientId}>
+                {refreshing ? 'Refreshing…' : '↻ Refresh reports'}
+              </button>
+            )}
+          </div>
         </div>
+        {hasPatientContext && (
+          <div className="doctor-patient-context">
+            <span className="doctor-patient-context-avatar" aria-hidden="true">
+              {selectedPatient.email.slice(0, 2).toUpperCase()}
+            </span>
+            <div>
+              <span className="doctor-patient-context-label">CURRENT PATIENT</span>
+              <strong>{selectedPatient.email}</strong>
+            </div>
+          </div>
+        )}
+        {message && ['profile', 'medications'].includes(activeSection) && (
+          <div role="status" aria-live="polite" className="status">{message}</div>
+        )}
+        {activeSection === 'patients' && (
+          <section className="doctor-directory" aria-label="Patient directory">
+            <label className="search-field doctor-search doctor-directory-search">
+              <span aria-hidden="true">⌕</span>
+              <input
+                type="search"
+                value={patientSearch}
+                onChange={(event) => setPatientSearch(event.target.value)}
+                placeholder="Search patients by email or ID"
+                aria-label="Search patients"
+              />
+              {patientSearch && (
+                <button type="button" onClick={() => setPatientSearch('')} aria-label="Clear patient search">
+                  Clear
+                </button>
+              )}
+            </label>
+            <div className="doctor-directory-heading">
+              <div>
+                <h2>All patients</h2>
+                <p>{patients.length} {patients.length === 1 ? 'patient' : 'patients'}</p>
+              </div>
+            </div>
+            <div role="status" aria-live="polite" className="status">{message}</div>
+            {loadingPatients && <p className="muted">Loading patients…</p>}
+            {!loadingPatients && filteredPatients.length === 0 && (
+              <div className="doctor-empty">
+                <strong>{patients.length ? 'No patients match your search' : 'No patients available'}</strong>
+                <p>{patients.length ? 'Try another email or patient ID.' : 'Patient profiles will appear here when available.'}</p>
+              </div>
+            )}
+            <div className="doctor-patient-list">
+              {filteredPatients.map((patient) => (
+                <button
+                  type="button"
+                  className="doctor-patient-card"
+                  key={patient.id}
+                  onClick={() => {
+                    setSelectedPatientId(patient.id);
+                    setActiveSection('profile');
+                    setMessage('');
+                  }}
+                  aria-label={`Open profile for ${patient.email}`}
+                >
+                  <span className="doctor-patient-card-avatar" aria-hidden="true">
+                    {patient.email.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span className="doctor-patient-card-details">
+                    <strong>{patient.email}</strong>
+                    <small>{patient.id === selectedPatientId ? 'Current patient' : 'Open patient profile'}</small>
+                  </span>
+                  <span className="doctor-overview-arrow" aria-hidden="true">→</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+        {activeSection === 'profile' && (
+          <>
+            <section className="doctor-welcome-card">
+              <div>
+                <span className="section-kicker">PATIENT PROFILE</span>
+                <h2>{selectedPatient?.email ?? 'Choose a patient'}</h2>
+                <p>Review health updates and treatment details for this patient.</p>
+              </div>
+              <span className="doctor-welcome-mark" aria-hidden="true">
+                {selectedPatient?.email.slice(0, 2).toUpperCase() ?? 'PT'}
+              </span>
+            </section>
+            <div className="dashboard-stats">
+              <Stat label="Total reports" value={dashboard?.page.total ?? '—'} />
+              <Stat label="Pending review" value={dashboard?.review_counts.pending ?? '—'} />
+              <Stat label="Reviewed" value={dashboard?.review_counts.reviewed ?? '—'} />
+              <Stat label="Active medications" value={dashboard ? activeMedicationCount : '—'} />
+            </div>
+            <div className="doctor-profile-grid">
+              <section className="panel doctor-overview-reports">
+                <div className="doctor-toolbar">
+                  <div><span className="section-kicker">LATEST UPDATES</span><h2>Recent symptom reports</h2></div>
+                  <button type="button" className="doctor-text-action" onClick={() => setActiveSection('reports')}>View all →</button>
+                </div>
+                {!dashboard && !message && <p className="muted">Loading patient updates…</p>}
+                {dashboard?.reports.length === 0 && (
+                  <div className="doctor-empty"><strong>No reports yet</strong><p>New patient updates will appear here.</p></div>
+                )}
+                {dashboard?.reports.slice(0, 3).map((report) => (
+                  <article className="doctor-recent-report" key={report.id}>
+                    <div>
+                      <strong>Report #{report.id}</strong>
+                      <span className="meta">{new Date(report.submitted_at).toLocaleString()}</span>
+                    </div>
+                    <span className={`review-badge ${report.review_status}`}>
+                      {report.review_status === 'reviewed' ? 'Reviewed' : 'Pending review'}
+                    </span>
+                    <div className="pill-list">
+                      {report.symptoms.map((symptom, index) => {
+                        const name = typeof symptom === 'object' ? symptom.name : symptom;
+                        return <span className="pill" key={`${name}-${index}`}>{name}</span>;
+                      })}
+                    </div>
+                  </article>
+                ))}
+                {dashboard && dashboard.reports.length > 3 && (
+                  <p className="muted">Showing the 3 most recent reports.</p>
+                )}
+              </section>
+              <section className="panel doctor-profile-medications">
+                <div className="doctor-toolbar">
+                  <div><span className="section-kicker">TREATMENT</span><h2>Medications</h2></div>
+                  <button type="button" className="doctor-text-action" onClick={() => setActiveSection('medications')}>Manage →</button>
+                </div>
+                {!dashboard && !message && <p className="muted">Loading medications…</p>}
+                {dashboard && !activeMedicationCount && (
+                  <div className="doctor-empty"><strong>No active medications</strong><p>Medication changes will appear here.</p></div>
+                )}
+                {patientMedications.filter((medication) => medication.is_active).length > 0 && (
+                  <ul className="doctor-profile-medication-list">
+                    {patientMedications.filter((medication) => medication.is_active).map((medication) => (
+                      <li key={medication.medication_name}>
+                        <strong>{medication.medication_name}</strong>
+                        <span>{medication.dosage_value} {medication.dosage_unit}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <button type="button" className="doctor-profile-add-medication" onClick={() => setActiveSection('medications')}>
+                  + Add or update medication
+                </button>
+              </section>
+            </div>
+            <div className="doctor-profile-actions">
+              <button type="button" className="doctor-overview-card" onClick={() => setActiveSection('reports')}>
+                <span className="doctor-overview-icon" aria-hidden="true">▤</span>
+                <span><strong>Review patient reports</strong><small>{dashboard?.review_counts.pending ?? '—'} awaiting review</small></span>
+                <span className="doctor-overview-arrow" aria-hidden="true">→</span>
+              </button>
+              <button type="button" className="doctor-overview-card" onClick={() => setActiveSection('medications')}>
+                <span className="doctor-overview-icon" aria-hidden="true">＋</span>
+                <span><strong>Manage medications</strong><small>{activeMedicationCount} active</small></span>
+                <span className="doctor-overview-arrow" aria-hidden="true">→</span>
+              </button>
+            </div>
+          </>
+        )}
+        {activeSection === 'medications' && (
+          <section className="panel doctor-medication-panel" aria-labelledby="doctor-medication-heading">
+            <div className="doctor-toolbar">
+              <div><span className="section-kicker">PATIENT TREATMENT</span><h2 id="doctor-medication-heading">Medication plan</h2></div>
+              <span className="record-count">{activeMedicationCount} active</span>
+            </div>
+            <p className="doctor-section-description">Add or update a medication for the selected patient. Deactivated medications remain in the patient’s history.</p>
+            <form className="doctor-medication-form" onSubmit={addMedication}>
+              <label>
+                <span className="field-label">Medication</span>
+                <select
+                  value={selectedMedication}
+                  onChange={(event) => setSelectedMedication(event.target.value)}
+                  required
+                >
+                  <option value="">Select a medication</option>
+                  {availableMedications.map((medication) => (
+                    <option key={medication} value={medication}>{medication}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span className="field-label">Dosage (mg)</span>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="any"
+                  value={dosageValue}
+                  onChange={(event) => setDosageValue(event.target.value)}
+                  required
+                />
+              </label>
+              <button type="submit" disabled={!selectedPatientId || savingMedication}>
+                {savingMedication ? 'Saving…' : 'Save medication'}
+              </button>
+            </form>
+            <div className="doctor-medication-list-heading">
+              <h3>Current and past medications</h3>
+              <span className="muted">Inactive medications are retained for reference.</span>
+            </div>
+            <ul className="doctor-medication-list">
+              {!patientMedications.length && dashboard && (
+                <li className="doctor-medication-empty">No medications recorded for this patient.</li>
+              )}
+              {patientMedications.map((medication) => (
+                <li key={medication.medication_name}>
+                  <span>{medication.medication_name}</span>
+                  <span>{medication.dosage_value} {medication.dosage_unit}</span>
+                  <span className={medication.is_active ? 'active-medication' : 'inactive-medication'}>
+                    {medication.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                  {medication.is_active && (
+                    <button
+                      type="button"
+                      className="deactivate-medication-button"
+                      onClick={() => deactivateMedication(medication)}
+                      disabled={savingMedication}
+                    >
+                      Deactivate
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {activeSection === 'reports' && (
+        <>
         <div className="dashboard-stats">
           <Stat label="Total reports" value={dashboard?.page.total ?? '—'} />
           <Stat label="Pending review" value={dashboard?.review_counts.pending ?? '—'} />
@@ -604,7 +1277,18 @@ function DoctorDashboard({ user, onLogout }) {
               <div><strong>Report #{report.id}</strong><div className="meta">{new Date(report.submitted_at).toLocaleString()}</div></div>
               <span className={`review-badge ${report.review_status}`}>{report.review_status === 'reviewed' ? 'Reviewed' : 'Pending review'}</span>
             </div>
-            <div className="pill-list">{report.symptoms.map((symptom) => <span className="pill" key={symptom}>{symptom}</span>)}</div>
+            <div className="pill-list">
+              {report.symptoms.map((symptom, index) => {
+                const isObject = typeof symptom === 'object';
+                const name = isObject ? symptom.name : symptom;
+                return (
+                  <span className="pill" key={`${name}-${index}`}>
+                    {name}
+                    {isObject && ` (Severity: ${symptom.severity}/10)`}
+                  </span>
+                );
+              })}
+            </div>
             <p><strong>Patient notes:</strong> {report.notes || 'No additional details'}</p>
             <label className="field-label" htmlFor={`doctor-note-${report.id}`}>Doctor review notes</label>
             <textarea id={`doctor-note-${report.id}`} maxLength={1000} rows={3}
@@ -626,10 +1310,45 @@ function DoctorDashboard({ user, onLogout }) {
           )}
         </div>}
       </section>
-      </main>
+      </>
+      )}
+          </main>
+        </div>
+      </div>
+      {medicationNotice && (
+        <div
+          className="submission-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setMedicationNotice(null);
+            }
+          }}
+        >
+          <section
+            className={`submission-dialog ${medicationNotice.isError ? 'error' : 'success'}`}
+            role={medicationNotice.isError ? 'alertdialog' : 'dialog'}
+            aria-modal="true"
+            aria-labelledby="medication-dialog-title"
+            aria-describedby="medication-dialog-message"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setMedicationNotice(null);
+            }}
+          >
+            <div className="submission-dialog-icon" aria-hidden="true">
+              {medicationNotice.isError ? '!' : '✓'}
+            </div>
+            <h2 id="medication-dialog-title">{medicationNotice.title}</h2>
+            <p id="medication-dialog-message">{medicationNotice.message}</p>
+            <button type="button" autoFocus onClick={() => setMedicationNotice(null)}>
+              Close
+            </button>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
+
 
 function HealthwatchApp() {
   const [user, setUser] = useState(null);
@@ -665,7 +1384,7 @@ function HealthwatchApp() {
     };
   }, []);
 
-  async function handleLogin(email, password) {
+  async function handleLogin(email, password, doctorStaffId) {
     setLoginError('');
 
     try {
@@ -675,7 +1394,11 @@ function HealthwatchApp() {
           'Content-Type': 'application/json',
         },
         credentials: 'same-origin',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email,
+          password,
+          ...(doctorStaffId !== null ? { doctor_staff_id: doctorStaffId } : {}),
+        }),
       });
 
       setUser(result.user);
@@ -691,6 +1414,8 @@ function HealthwatchApp() {
         credentials: 'same-origin',
       });
 
+      window.sessionStorage.removeItem(DOCTOR_SELECTED_PATIENT_KEY);
+      window.sessionStorage.removeItem(DOCTOR_ACTIVE_SECTION_KEY);
       setUser(null);
       setLoginError('');
     } catch (error) {
@@ -707,6 +1432,7 @@ function HealthwatchApp() {
       <LoginForm
         onLogin={handleLogin}
         error={loginError}
+        onModeChange={() => setLoginError('')}
       />
     );
   }

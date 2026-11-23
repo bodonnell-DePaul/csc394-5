@@ -3,13 +3,41 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
-from ..config import AVAILABLE_SYMPTOMS, FIXED_PATIENT_ID, SAFE_DOSE_RANGES
+from ..config import (
+    AVAILABLE_MEDICATIONS,
+    AVAILABLE_SYMPTOMS,
+    FIXED_PATIENT_ID,
+    SAFE_DOSE_RANGES,
+)
+
+
+class SymptomDetail(BaseModel):
+    name: str = Field(..., min_length=1)
+    severity: int = Field(..., ge=1, le=10)
+    location: str = Field(default="Unspecified", max_length=200)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        cleaned_name = value.strip()
+        if cleaned_name not in AVAILABLE_SYMPTOMS:
+            raise ValueError(f"Unsupported symptom: {cleaned_name}")
+        return cleaned_name
+
+    @field_validator("location", mode="before")
+    @classmethod
+    def clean_location(cls, value: str | None) -> str:
+        if value is None:
+            return "Unspecified"
+        cleaned_location = str(value).strip()
+        return cleaned_location or "Unspecified"
 
 
 class SymptomReportRequest(BaseModel):
-    patient_id: str = FIXED_PATIENT_ID
-    symptoms: list[str]
+    patient_id: str | None = None
+    symptoms: list[SymptomDetail | str]
     notes: str | None = Field(default=None, max_length=1000)
+    associated_medication: str | None = Field(default=None, min_length=1)
     medication_name: str | None = Field(default=None, min_length=1)
     dosage_value: float | None = Field(default=None, gt=0)
     dosage_unit: str | None = Field(
@@ -18,18 +46,22 @@ class SymptomReportRequest(BaseModel):
     )
     @field_validator("symptoms")
     @classmethod
-    def validate_symptoms(cls, value: list[str]) -> list[str]:
-        cleaned: list[str] = []
+    def validate_symptoms(
+        cls, value: list[SymptomDetail | str]
+    ) -> list[SymptomDetail | str]:
+        cleaned: list[SymptomDetail | str] = []
         seen: set[str] = set()
 
         for symptom in value:
-            cleaned_name = symptom.strip()
+            cleaned_name = (
+                symptom.name if isinstance(symptom, SymptomDetail) else symptom.strip()
+            )
             if not cleaned_name:
                 continue
             if cleaned_name not in AVAILABLE_SYMPTOMS:
                 raise ValueError(f"Unsupported symptom: {cleaned_name}")
             if cleaned_name not in seen:
-                cleaned.append(cleaned_name)
+                cleaned.append(symptom if isinstance(symptom, SymptomDetail) else cleaned_name)
                 seen.add(cleaned_name)
 
         if not cleaned:
@@ -39,6 +71,17 @@ class SymptomReportRequest(BaseModel):
             )
 
         return cleaned
+
+    @field_validator("associated_medication")
+    @classmethod
+    def validate_associated_medication(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned_name = value.strip()
+        for medication in AVAILABLE_MEDICATIONS:
+            if medication.casefold() == cleaned_name.casefold():
+                return medication
+        raise ValueError("Unsupported medication.")
 
     @field_validator("notes", mode="before")
     @classmethod
@@ -62,21 +105,34 @@ class DoctorReviewUpdate(BaseModel):
         return value.strip()
 
 class DosageUpdateRequest(BaseModel):
-    patient_id: str = FIXED_PATIENT_ID
+    patient_id: str = Field(..., min_length=1)
     medication_name: str = Field(..., min_length=1)
     dosage_value: float = Field(..., gt=0, description="Dosage must be greater than 0")
-    dosage_unit: str
+    dosage_unit: Literal["mg"]
+
+    @field_validator("patient_id")
+    @classmethod
+    def clean_patient_id(cls, value: str) -> str:
+        cleaned_id = value.strip()
+        if not cleaned_id:
+            raise ValueError("Patient ID cannot be empty.")
+        return cleaned_id
 
     @field_validator("medication_name")
     @classmethod
     def clean_medication(cls, value: str) -> str:
-        return value.strip().lower()
+        cleaned_name = value.strip().lower()
+        if cleaned_name not in {
+            medication.lower() for medication in AVAILABLE_MEDICATIONS
+        }:
+            raise ValueError("Unsupported medication.")
+        return cleaned_name
 
     @model_validator(mode="after")
-    def check_safe_range(self):
+    def check_safe_range(self) -> "DosageUpdateRequest":
         limits = SAFE_DOSE_RANGES.get(self.medication_name, {}).get(self.dosage_unit)
         if limits is None:
-            return self  # unknown medication or unit: no range to check
+            raise ValueError("No safe dosage range is configured for this medication.")
         low, high = limits
         if not low <= self.dosage_value <= high:
             raise ValueError(
@@ -94,3 +150,25 @@ class MedicationRemoveRequest(BaseModel):
     @classmethod
     def clean_medication(cls, value: str) -> str:
         return value.strip().lower()
+
+
+class MedicationStatusUpdateRequest(BaseModel):
+    patient_id: str = Field(..., min_length=1)
+    medication_name: str = Field(..., min_length=1)
+    active: bool
+
+    @field_validator("patient_id")
+    @classmethod
+    def clean_patient_id(cls, value: str) -> str:
+        cleaned_id = value.strip()
+        if not cleaned_id:
+            raise ValueError("Patient ID cannot be empty.")
+        return cleaned_id
+
+    @field_validator("medication_name")
+    @classmethod
+    def clean_medication(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        if not cleaned:
+            raise ValueError("Medication name cannot be empty.")
+        return cleaned
