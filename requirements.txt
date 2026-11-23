@@ -4,3 +4,4 @@ pydantic>=2.11.10,<2.14
 argon2-cffi>=23.1.0,<26
 Authlib>=1.9.10,<2
 python-dotenv>=1.0,<2
+httpx>=0.27,<1
