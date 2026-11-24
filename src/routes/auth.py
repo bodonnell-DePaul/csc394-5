@@ -17,6 +17,7 @@ from authlib.jose import JsonWebKey, JsonWebToken
 import hashlib
 import threading
 import time
+import logging
 from ..config import GOOGLE_CLIENT_SECRET
 from ..config import GOOGLE_CLIENT_ID, GOOGLE_REDIRECT_URI
 from ..config import (
@@ -35,6 +36,8 @@ from .database import (
     get_user_by_email,
     update_user_patient_id,
 )
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 @router.get("/status")
 def auth_status():
@@ -355,8 +358,16 @@ def exchange_google_code(code: str, expected_nonce: str) -> dict:
                 "grant_type": "authorization_code",
             },
         )
+        if token_response.is_error:
+            logger.error(
+                "Google OAuth token exchange failed. HTTP status: %s",
+                token_response.status_code,
+            )
+
         token_response.raise_for_status()
         tokens = token_response.json()
+
+        logger.warning("Google OAuth token exchange successful.")
 
         id_token = tokens["id_token"]
 
@@ -366,6 +377,7 @@ def exchange_google_code(code: str, expected_nonce: str) -> dict:
         keys_response.raise_for_status()
         google_keys = JsonWebKey.import_key_set(keys_response.json())
 
+        logger.warning("Google OAuth signing keys retrieved successfully.")
     # Only accept Google's RS256 signing algorithm.
     verifier = JsonWebToken(["RS256"])
 
@@ -396,6 +408,7 @@ def exchange_google_code(code: str, expected_nonce: str) -> dict:
     )
 
     claims.validate()
+    logger.warning("Google OAuth ID token verified successfully.")
 
     return {
         "sub": claims["sub"],
@@ -450,7 +463,11 @@ def google_oauth_callback(
     # Exchange authorization code for verified Google identity.
     try:
         google_identity = exchange_google_code(code, expected_nonce)
-    except Exception:
+    except Exception as exc:
+        logger.error(
+            "Google OAuth authentication failed. Exception type: %s",
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=502,
             detail="Unable to verify Google authentication.",
