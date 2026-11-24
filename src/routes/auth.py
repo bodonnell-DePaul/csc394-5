@@ -346,8 +346,11 @@ class OAuthDiagnosticError(Exception):
 def exchange_google_code(code: str, expected_nonce: str) -> dict:
     """Exchange a Google authorization code for a verified identity."""
 
-    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
-        raise OAuthDiagnosticError("OAUTH_CONFIG")
+    if not GOOGLE_CLIENT_ID:
+        raise OAuthDiagnosticError("OAUTH_CLIENT_ID_MISSING")
+
+    if not GOOGLE_CLIENT_SECRET:
+        raise OAuthDiagnosticError("OAUTH_CLIENT_SECRET_MISSING")
 
     with httpx.Client(timeout=10.0) as client:
         try:
