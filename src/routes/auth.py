@@ -340,81 +340,133 @@ def start_google_oauth():
     )
 
     return response
+class OAuthDiagnosticError(Exception):
+    pass
 
 def exchange_google_code(code: str, expected_nonce: str) -> dict:
     """Exchange a Google authorization code for a verified identity."""
 
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
-        raise RuntimeError("Google OAuth credentials are not configured.")
+        raise OAuthDiagnosticError("OAUTH_CONFIG")
 
     with httpx.Client(timeout=10.0) as client:
-        token_response = client.post(
-            "https://oauth2.googleapis.com/token",
-            data={
-                "code": code,
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "redirect_uri": GOOGLE_REDIRECT_URI,
-                "grant_type": "authorization_code",
-            },
-        )
-        if token_response.is_error:
-            logger.error(
-                "Google OAuth token exchange failed. HTTP status: %s",
-                token_response.status_code,
+        try:
+            token_response = client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": GOOGLE_REDIRECT_URI,
+                    "grant_type": "authorization_code",
+                },
             )
+            token_response.raise_for_status()
 
-        token_response.raise_for_status()
-        tokens = token_response.json()
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+
+            if status == 400:
+                raise OAuthDiagnosticError(
+                    "OAUTH_TOKEN_HTTP_400"
+                ) from exc
+
+            if status == 401:
+                raise OAuthDiagnosticError(
+                    "OAUTH_TOKEN_HTTP_401"
+                ) from exc
+
+            raise OAuthDiagnosticError(
+                "OAUTH_TOKEN_HTTP_ERROR"
+            ) from exc
+
+        except httpx.RequestError as exc:
+            raise OAuthDiagnosticError(
+                "OAUTH_TOKEN_CONNECTION"
+            ) from exc
+
+        try:
+            tokens = token_response.json()
+            id_token = tokens["id_token"]
+        except (ValueError, KeyError, TypeError) as exc:
+            raise OAuthDiagnosticError(
+                "OAUTH_TOKEN_MISSING"
+            ) from exc
 
         logger.warning("Google OAuth token exchange successful.")
 
-        id_token = tokens["id_token"]
+        try:
+            keys_response = client.get(
+                "https://www.googleapis.com/oauth2/v3/certs"
+            )
+            keys_response.raise_for_status()
 
-        keys_response = client.get(
-            "https://www.googleapis.com/oauth2/v3/certs"
+            google_keys = JsonWebKey.import_key_set(
+                keys_response.json()
+            )
+
+        except Exception as exc:
+            raise OAuthDiagnosticError(
+                "OAUTH_SIGNING_KEYS"
+            ) from exc
+
+        logger.warning(
+            "Google OAuth signing keys retrieved successfully."
         )
-        keys_response.raise_for_status()
-        google_keys = JsonWebKey.import_key_set(keys_response.json())
 
-        logger.warning("Google OAuth signing keys retrieved successfully.")
-    # Only accept Google's RS256 signing algorithm.
-    verifier = JsonWebToken(["RS256"])
+    try:
+        verifier = JsonWebToken(["RS256"])
 
-    claims = verifier.decode(
-        id_token,
-        google_keys,
-        claims_options={
-            "iss": {
-                "essential": True,
-                "values": [
-                    "https://accounts.google.com",
-                    "accounts.google.com",
-                ],
+        claims = verifier.decode(
+            id_token,
+            google_keys,
+            claims_options={
+                "iss": {
+                    "essential": True,
+                    "values": [
+                        "https://accounts.google.com",
+                        "accounts.google.com",
+                    ],
+                },
+                "aud": {
+                    "essential": True,
+                    "value": GOOGLE_CLIENT_ID,
+                },
+                "exp": {"essential": True},
+                "sub": {"essential": True},
+                "email": {"essential": True},
+                "email_verified": {"essential": True},
+                "nonce": {
+                    "essential": True,
+                    "value": expected_nonce,
+                },
             },
-            "aud": {
-                "essential": True,
-                "value": GOOGLE_CLIENT_ID,
-            },
-            "exp": {"essential": True},
-            "sub": {"essential": True},
-            "email": {"essential": True},
-            "email_verified": {"essential": True},
-            "nonce": {
-                "essential": True,
-                "value": expected_nonce,
-            },
-        },
+        )
+
+    except Exception as exc:
+        raise OAuthDiagnosticError(
+            "OAUTH_TOKEN_DECODE"
+        ) from exc
+
+    try:
+        claims.validate()
+
+        identity = {
+            "sub": claims["sub"],
+            "email": claims["email"],
+            "email_verified": claims["email_verified"],
+        }
+
+    except Exception as exc:
+        raise OAuthDiagnosticError(
+            "OAUTH_CLAIMS"
+        ) from exc
+
+    logger.warning(
+        "Google OAuth ID token verified successfully."
     )
 
-    claims.validate()
-    logger.warning("Google OAuth ID token verified successfully.")
-
-    return {
-        "sub": claims["sub"],
-        "email": claims["email"],
-        "email_verified": claims["email_verified"],
-    }
+    return identity
 
 @router.get("/google/callback")
 def google_oauth_callback(
@@ -462,12 +514,24 @@ def google_oauth_callback(
 
     # Exchange authorization code for verified Google identity.
     try:
-        google_identity = exchange_google_code(code, expected_nonce)
+        google_identity = exchange_google_code(
+        code, expected_nonce
+    )
+
+    except OAuthDiagnosticError as exc:
+        logger.error("Google OAuth diagnostic: %s", str(exc))
+
+        raise HTTPException(
+            status_code=502,
+            detail=f"Unable to verify Google authentication. [{exc}]",
+        )
+
     except Exception as exc:
         logger.error(
             "Google OAuth authentication failed. Exception type: %s",
             type(exc).__name__,
         )
+
         raise HTTPException(
             status_code=502,
             detail="Unable to verify Google authentication.",
