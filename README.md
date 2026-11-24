@@ -226,6 +226,7 @@ system.
   selected patient.
 - `GET` and `POST /api/doctor/medications` list and add prescriptions for a
   patient; `PATCH /api/medication` deactivates one.
+  
 
 Invalid request bodies or query parameters return 422. Unauthenticated
 requests return 401, and role or patient access violations return 403.
@@ -240,3 +241,5 @@ requests return 401, and role or patient access violations return 403.
 - `src/data/healthwatch.db`: default local SQLite database
 - `week3-api-documentation/02-architecture.md`: architecture diagram and
   component responsibilities
+  - 'tree/main/tests/': ensures that the backend source code support the commands as expected
+  - 
