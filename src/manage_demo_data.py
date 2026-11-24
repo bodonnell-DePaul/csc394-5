@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from .config import DB_PATH
 from .routes import database
-from .routes.auth import seed_demo_accounts
+from .routes.auth import DEMO_ACCOUNTS, hash_password, seed_demo_accounts
 
 
 def show_status() -> None:
@@ -48,15 +48,42 @@ def reset_demo_data() -> None:
     seed_demo_accounts()
 
 
+def repair_demo_doctor() -> None:
+    """Restore only the documented demo doctor's login on an existing DB."""
+    demo = next(account for account in DEMO_ACCOUNTS if account["role"] == "doctor")
+    existing = database.get_user_by_email(demo["email"])
+    if existing is None:
+        seed_demo_accounts()
+        return
+    if existing["role"] != "doctor":
+        raise ValueError("Demo doctor email belongs to a non-doctor account.")
+
+    with closing(database.get_connection()) as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET password_hash = ?, doctor_staff_id = ?
+            WHERE id = ? AND role = 'doctor'
+            """,
+            (hash_password(demo["password"]), demo["doctor_staff_id"], existing["id"]),
+        )
+        # Invalidate only the demo doctor's existing sessions.
+        conn.execute(
+            "DELETE FROM user_sessions WHERE user_id = ?", (existing["id"],)
+        )
+        conn.commit()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Inspect and maintain the local Healthwatch demo database."
     )
     parser.add_argument(
         "command",
-        choices=("status", "migrate", "seed", "clean", "reset"),
+        choices=("status", "migrate", "seed", "clean", "repair-doctor", "reset"),
         help="status: show counts; migrate: initialize/upgrade schema; "
         "seed: add missing demo accounts; clean: remove expired sessions; "
+        "repair-doctor: restore the demo doctor's login without deleting reports; "
         "reset: clear symptom reports and sessions, preserving user accounts",
     )
     args = parser.parse_args(argv)
@@ -74,6 +101,17 @@ def main(argv: list[str] | None = None) -> int:
         database.init_db()
         removed = clean_expired_sessions()
         print(f"Removed {removed} expired session(s).")
+    elif args.command == "repair-doctor":
+        database.init_db()
+        confirmation = input(
+            "This restores the documented demo doctor's password and staff ID, "
+            "and ends only that doctor's sessions. Type REPAIR DOCTOR to continue: "
+        )
+        if confirmation != "REPAIR DOCTOR":
+            print("Doctor login repair cancelled.")
+            return 1
+        repair_demo_doctor()
+        print("Demo doctor login restored; patient data and reports preserved.")
     else:
         database.init_db()
         confirmation = input(
