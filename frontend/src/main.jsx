@@ -28,6 +28,19 @@ function LoginForm({ onLogin, error, onModeChange }) {
   const [password, setPassword] = useState('');
   const [doctorStaffId, setDoctorStaffId] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleAvailable, setGoogleAvailable] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    requestJson('/api/auth/providers')
+      .then((providers) => {
+        if (active) setGoogleAvailable(providers.google_patient_login === true);
+      })
+      .catch(() => {
+        if (active) setGoogleAvailable(false);
+      });
+    return () => { active = false; };
+  }, []);
 
   function selectRole(role) {
     setLoginRole(role);
@@ -108,7 +121,7 @@ function LoginForm({ onLogin, error, onModeChange }) {
           {loading ? 'Signing in...' : 'Sign In'}
         </button>
 
-        {loginRole === 'patient' && (
+        {loginRole === 'patient' && googleAvailable && (
           <>
             <div className="login-divider">
               <span>or</span>
