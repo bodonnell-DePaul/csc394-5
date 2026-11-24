@@ -73,41 +73,23 @@ Non-demo doctor accounts need a staff ID provisioned before they can sign in.
 verified medical license, a secret, or multi-factor authentication. Demo
 credentials are intentionally shared in this README; use synthetic data only.
 
-### Google Sign-In and authorized access
+## OAuth integration and Set-up Instructions 
+The repository implements Google OAuth authentication to support external verification of our google accounts to access the patient portal.
+When employing OAuth, here we updated the patient portal to allow patients to select **Sign in with Google** when attempting to log in.
+On the other hand, we already established a **staff Id** for the doctor interface as an additional step for verifying their login credentials.
 
-Healthwatch supports Google OAuth 2.0 as an alternative sign-in method
-for authorized patient accounts.
+**Front-end and back-end O-auth Architecture**: To deploy Google OAuth integration, we updated our frontend to include code that renders a 'Google Sign-in' 
+button on the patient log-in page, triggering a Google OAuth Consent Flow. Once Google authenticates the user, the frontend passes an authorization code/token 
+to our FastApi Backend. Our FastApi validates the token against Google's OAuth Servers using environment variables, creates the patient session, and redirects the user to the patient dashboard. 
+**Set-up**: When accessing Google API using OAuth 2.0 to integrate it with HealthWatch, follow  (https://developers.google.com/identity/protocols/oauth2), which essentially describes how to obtain OAuth 2.0 credentials
+to access Google APIs, and ultimately set up this verification to our web server. But first,
+1. **Create a project from the the Google Cloud Console** (https://console.cloud.google.com) and select the Healthwatch project
+2. **Configure the Consent screen**: Navigate to **API and Services -> OAuth Consent Screen** and select **External** to fill in the required app details and test user details.
+3. **Obtain OAuth 2.0 Credentials**: Under **API and Services -> Credentials -> Create Credentials-> OAuth Client ID** create a client ID (GOOGLE_CLIENT_ID) to identify HealthWatch to Google when initiating login, and a client secret (GOOGLE_CLIENT_SECRET) that authenticates the backend server when exchanging authorization codes for access tokens. Since we creating a client appropriate for a web application, configure these credentials to access Google APIs from a web application built on Python/Fast-Api (Server-side web application).
+4. **Configure the Redirect URIS**: Under **Authorized Redirect URIs** the backend callback URL ('GOOGLE_REDIRECT_URI' , http://localhost:8000/api/auth/google/callback") for local deployment, as well as the Render callback URL (https://csc394-5.onrender.com/) for production deployment.
+5. **Save the Environment Variables**: Add "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SERCRET", and "GOOGLE_REDIRECT_URI" under the .env file located in the root directory of our repository (src/server/config.py), and loaded automatically via python-dotvenv in config.py. Also save the variables pointed to the Render callback URL  under the "Environments Tab" to match the environment variables in config.py.
 
-**Important for project evaluation:** When accessing Healthwatch
-through Google Sign-In, please use the DePaul email address that
-has been previously authorized by the development team.
-
-If multiple Google accounts are signed in on the same browser,
-ensure that the authorized account is selected when prompted.
-
-Additional Google accounts must be approved and configured by
-the development team before access is granted.
-
-**Google Sign-In is not a public registration system.** Successfully
-authenticating with Google does not automatically grant access to the
-Healthwatch patient dashboard.
-
-To access the dashboard through Google Sign-In, users must:
-
-- Authenticate using a valid Google account.
-- Have a verified Google email address.
-- Have an existing, authorized patient account in the Healthwatch database.
-
-The backend verifies the Google identity and checks the associated
-patient account before creating an authenticated session. Users without
-an authorized patient account are denied access.
-
-For the current project demonstration, Google Sign-In access is
-restricted to authorized development team members and approved
-project evaluators.
-
-Google Sign-In is available for patient accounts only. Doctor accounts
-must use the designated doctor sign-in process.
+**Note**: At the point of finishing our project, Google login is only restricted to authorized users, indicating that not everyone with a Google account gets automatic access to the Healthwatch portal. Google verifies the user identity, but the backend also checks whether the email is associated with an authorized patient account in our database. If not, then access is denied.
 
 ## Run checks locally
 
