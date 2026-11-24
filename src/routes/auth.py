@@ -262,6 +262,17 @@ GOOGLE_AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 OAUTH_STATE_COOKIE = "healthwatch_oauth_state"
 OAUTH_STATE_LIFETIME = 600
 
+
+def google_patient_login_available() -> bool:
+    """Google login is optional; password login works without provider settings."""
+    return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI)
+
+
+@router.get("/providers")
+def auth_providers():
+    """Expose provider availability without exposing OAuth credentials."""
+    return {"google_patient_login": google_patient_login_available()}
+
 # Store hashes rather than raw OAuth state values.
 _oauth_states = {}
 _oauth_states_lock = threading.Lock()
@@ -307,6 +318,12 @@ def consume_oauth_state(state: str) -> str | None:
 
 @router.get("/google")
 def start_google_oauth():
+    if not google_patient_login_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Google sign-in is unavailable. Please use email and password.",
+        )
+
     # Generate a unique state to protect against OAuth login CSRF.
     state = secrets.token_urlsafe(32)
     nonce = register_oauth_state(state)
@@ -412,6 +429,11 @@ def google_oauth_callback(
     error: str | None = None,
 ):
     """Handle Google OAuth callback for existing Healthwatch patients."""
+    if not google_patient_login_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Google sign-in is unavailable. Please use email and password.",
+        )
 
     expected_state = request.cookies.get(OAUTH_STATE_COOKIE)
 

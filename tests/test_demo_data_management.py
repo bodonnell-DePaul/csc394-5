@@ -98,6 +98,47 @@ class DemoDataManagementTests(unittest.TestCase):
             sessions = conn.execute("SELECT COUNT(*) FROM user_sessions").fetchone()[0]
         self.assertEqual(sessions, 1)
 
+    def test_repair_doctor_requires_confirmation_and_preserves_patient_records(self):
+        from src.routes.auth import hash_password, verify_password
+
+        self.run_command("seed")
+        doctor = database.get_user_by_email("doctor@example.com")
+        patient = database.get_user_by_email("patient@example.com")
+        report = database.save_symptom_report(
+            FIXED_PATIENT_ID, ["Nausea"], "Demo symptoms"
+        )
+        with closing(database.get_connection()) as conn:
+            conn.execute(
+                "UPDATE users SET password_hash = ?, doctor_staff_id = ? WHERE id = ?",
+                (hash_password("OldPassword!"), "111222", doctor["id"]),
+            )
+            conn.commit()
+        expires = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        database.create_session(doctor["id"], "doctor-session", expires)
+        database.create_session(patient["id"], "patient-session", expires)
+
+        cancelled, _ = self.run_command("repair-doctor", "NO")
+        self.assertEqual(cancelled, 1)
+        self.assertEqual(
+            database.get_user_by_email("doctor@example.com")["doctor_staff_id"],
+            "111222",
+        )
+
+        code, output = self.run_command("repair-doctor", "REPAIR DOCTOR")
+        self.assertEqual(code, 0)
+        self.assertIn("patient data and reports preserved", output)
+        restored = database.get_user_by_email("doctor@example.com")
+        self.assertEqual(restored["id"], doctor["id"])
+        self.assertEqual(restored["doctor_staff_id"], "742619")
+        self.assertTrue(verify_password("DoctorPassword123!", restored["password_hash"]))
+        self.assertFalse(verify_password("OldPassword!", restored["password_hash"]))
+        self.assertIsNone(database.get_session_user("doctor-session"))
+        self.assertIsNotNone(database.get_session_user("patient-session"))
+        self.assertEqual(database.get_user_by_email("patient@example.com"), patient)
+        reports, count = database.list_symptom_reports(FIXED_PATIENT_ID, 20, 0)
+        self.assertEqual(count, 1)
+        self.assertEqual(reports[0]["id"], report["id"])
+
     def test_reset_requires_confirmation_and_preserves_accounts(self):
         self.run_command("seed")
         user = database.get_user_by_email("patient@example.com")

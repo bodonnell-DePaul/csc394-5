@@ -65,6 +65,45 @@ doctor accounts need a staff ID provisioned before they can sign in.
 verified medical license, a secret, or multi-factor authentication. Demo
 credentials are intentionally shared in this README; use synthetic data only.
 
+## Optional Google sign-in
+
+Patient email/password login and doctor email/password/staff-ID login work **without**
+Google OAuth. The patient login page only offers **Continue with Google** when
+the following server-side environment variables are set:
+
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_REDIRECT_URI` (for example,
+  `https://csc394-5.onrender.com/api/auth/google/callback`)
+
+Configure the same exact callback URI in the Google Cloud OAuth client's
+authorized redirect URIs. Put credentials in Render environment settings
+(or a local, untracked `.env`) — never commit secrets. Existing patient
+accounts can use Google only when their verified Google email matches their
+Healthwatch account. Doctor Google sign-in is not supported. Without provider
+credentials, the Google option is hidden and direct OAuth requests return 503,
+rather than redirecting to a broken Google sign-in screen.
+
+## Fix an existing demo doctor login (without deleting patient data)
+
+A persistent SQLite database may contain a demo doctor with a password that
+differs from the documented credentials. Startup seeding **does not** overwrite
+existing passwords. To restore just the documented synthetic doctor account,
+run in the same environment and with the same `HEALTHWATCH_DB_PATH` as the
+running server:
+
+```sh
+python -m src.manage_demo_data repair-doctor
+```
+
+Type `REPAIR DOCTOR` when prompted. This restores
+`doctor@example.com` to the documented demo password and staff ID,
+invalidates only that doctor's sessions, and preserves patient accounts,
+medications, and symptom reports. It does **not** modify real doctor accounts;
+the app is a synthetic-only demonstration. Back up the database before
+maintenance. This is an explicit one-time repair, **not** an automatic reset
+on deploy.
+
 ## Run checks locally
 
 Install the development tools once:
@@ -138,6 +177,7 @@ python -m src.manage_demo_data status
 python -m src.manage_demo_data migrate
 python -m src.manage_demo_data seed
 python -m src.manage_demo_data clean
+python -m src.manage_demo_data repair-doctor
 python -m src.manage_demo_data reset
 ```
 
@@ -147,6 +187,8 @@ python -m src.manage_demo_data reset
 - `seed`: add missing demo accounts without changing existing accounts or
   inserting reports.
 - `clean`: delete expired sessions only.
+- `repair-doctor`: type `REPAIR DOCTOR` to restore only the demo doctor's
+  documented login and invalidate its sessions, preserving patient records.
 - `reset`: type `RESET` when prompted to permanently delete all reports and
   sessions while preserving accounts. Stop the server first. Back up the
   database before maintenance.

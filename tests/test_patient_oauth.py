@@ -21,9 +21,59 @@ class PatientOAuthTests(unittest.TestCase):
         database_patch.start()
         self.addCleanup(database_patch.stop)
 
+        # OAuth contract tests opt into mock provider settings, independent of Render.
+        for name, value in (
+            ("GOOGLE_CLIENT_ID", "test-google-client"),
+            ("GOOGLE_CLIENT_SECRET", "test-google-secret"),
+            ("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"),
+        ):
+            setting_patch = patch.object(auth, name, value)
+            setting_patch.start()
+            self.addCleanup(setting_patch.stop)
+
         self.client = TestClient(create_app())
         self.client.__enter__()
         self.addCleanup(self.client.__exit__, None, None, None)
+
+    def test_google_provider_is_optional_without_blocking_password_login(self):
+        self.assertTrue(
+            self.client.get("/api/auth/providers").json()["google_patient_login"]
+        )
+
+        with patch.object(auth, "GOOGLE_CLIENT_SECRET", ""):
+            provider = self.client.get("/api/auth/providers")
+            self.assertEqual(provider.status_code, 200)
+            self.assertFalse(provider.json()["google_patient_login"])
+
+            google_start = self.client.get(
+                "/api/auth/google", follow_redirects=False
+            )
+            self.assertEqual(google_start.status_code, 503)
+            self.assertNotIn("location", google_start.headers)
+
+            google_callback = self.client.get("/api/auth/google/callback")
+            self.assertEqual(google_callback.status_code, 503)
+
+            patient_login = self.client.post(
+                "/api/auth/login",
+                json={
+                    "email": "patient@example.com",
+                    "password": "PatientPassword123!",
+                },
+            )
+            self.assertEqual(patient_login.status_code, 200)
+            self.assertEqual(patient_login.json()["user"]["role"], "patient")
+
+            doctor_login = self.client.post(
+                "/api/auth/login",
+                json={
+                    "email": "doctor@example.com",
+                    "password": "DoctorPassword123!",
+                    "doctor_staff_id": "742619",
+                },
+            )
+            self.assertEqual(doctor_login.status_code, 200)
+            self.assertEqual(doctor_login.json()["user"]["role"], "doctor")
 
     def start_google_oauth(self):
         response = self.client.get(
