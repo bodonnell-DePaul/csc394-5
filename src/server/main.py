@@ -9,7 +9,11 @@ from ..config import STATIC_DIR
 from ..routes.database import init_db
 from ..middleware.error_handlers import register_error_handlers
 from ..routes.routes import router
-from ..routes.auth import router as auth_router, seed_demo_accounts
+from ..routes.auth import (
+    router as auth_router,
+    seed_demo_accounts,
+    seed_google_patient_accounts,
+)
 from ..routes.legal import router as legal_router
 
 logger = logging.getLogger("uvicorn.error")
@@ -54,6 +58,7 @@ def create_app() -> FastAPI:
     def startup_event() -> None:
         init_db()
         seed_demo_accounts()
+        seed_google_patient_accounts()
 
     return app
 

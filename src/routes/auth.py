@@ -1,5 +1,7 @@
 """Authentication and authorization for Healthwatch."""
 import secrets
+import os
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
@@ -95,6 +97,44 @@ def seed_demo_accounts() -> None:
             update_user_patient_id(
                 account["email"], account["patient_id"]
             )
+
+
+def seed_google_patient_accounts() -> None:
+    """Provision explicitly authorized Google patient accounts."""
+    configured_emails = os.environ.get(
+        "GOOGLE_ALLOWED_PATIENT_EMAILS", ""
+    )
+
+    emails = {
+        email.strip().lower()
+        for email in configured_emails.split(",")
+        if email.strip()
+    }
+
+    created = 0
+
+    for email in sorted(emails):
+        if email.count("@") != 1 or any(c.isspace() for c in email):
+            logger.warning("Skipping invalid Google patient email configuration.")
+            continue
+
+        existing_user = get_user_by_email(email)
+
+        if existing_user is not None:
+            if existing_user["role"] != "patient":
+                logger.warning("Skipping non-patient Google account.")
+            continue
+
+        create_user(
+            email=email,
+            password_hash=hash_password(secrets.token_urlsafe(32)),
+            role="patient",
+            patient_id=str(uuid.uuid4()),
+        )
+
+        created += 1
+
+    logger.info("Provisioned %d Google patient accounts.", created)
 
 
 class LoginRequest(BaseModel):
