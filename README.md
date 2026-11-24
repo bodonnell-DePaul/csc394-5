@@ -5,6 +5,14 @@ clinician review. The React web client talks to a FastAPI server, which stores
 accounts, sessions, and reports in SQLite. It uses synthetic demo accounts and
 is not for real patient information or clinical use.
 
+## Project Presentation and Demonstration
+
+Our team presentation provides an overview of Healthwatch, its
+architecture, implemented features, and application functionality.
+
+[![Watch the Healthwatch Project Presentation](https://img.youtube.com/vi/5_FdQUTyuTg/0.jpg)](https://youtu.be/5_FdQUTyuTg)
+
+[Watch the full presentation on YouTube](https://youtu.be/5_FdQUTyuTg)
 
 ## Run the application locally
 
@@ -56,14 +64,50 @@ account is assigned its staff ID if it did not have one. Startup does not insert
 sample reports.
 
 Select **Doctor** on the sign-in screen to enter the six-digit staff ID as well
-as email and password. Patient sign-in still uses only email and password. The
-backend checks the doctor ID against the signed-in account before issuing a
-session; entering an ID on the patient sign-in path is rejected. Non-demo
-doctor accounts need a staff ID provisioned before they can sign in.
+as email and password. Patient sign-in supports email and password or Google Sign-In
+for authorized patient accounts. The backend checks the doctor ID against the signed-in
+account before issuing a session; entering an ID on the patient sign-in path is rejected.
+Non-demo doctor accounts need a staff ID provisioned before they can sign in.
 
 **Security limitation:** The doctor ID is an internal demo identifier, not a
 verified medical license, a secret, or multi-factor authentication. Demo
 credentials are intentionally shared in this README; use synthetic data only.
+
+### Google Sign-In and authorized access
+
+Healthwatch supports Google OAuth 2.0 as an alternative sign-in method
+for authorized patient accounts.
+
+**Important for project evaluation:** When accessing Healthwatch
+through Google Sign-In, please use the DePaul email address that
+has been previously authorized by the development team.
+
+If multiple Google accounts are signed in on the same browser,
+ensure that the authorized account is selected when prompted.
+
+Additional Google accounts must be approved and configured by
+the development team before access is granted.
+
+**Google Sign-In is not a public registration system.** Successfully
+authenticating with Google does not automatically grant access to the
+Healthwatch patient dashboard.
+
+To access the dashboard through Google Sign-In, users must:
+
+- Authenticate using a valid Google account.
+- Have a verified Google email address.
+- Have an existing, authorized patient account in the Healthwatch database.
+
+The backend verifies the Google identity and checks the associated
+patient account before creating an authenticated session. Users without
+an authorized patient account are denied access.
+
+For the current project demonstration, Google Sign-In access is
+restricted to authorized development team members and approved
+project evaluators.
+
+Google Sign-In is available for patient accounts only. Doctor accounts
+must use the designated doctor sign-in process.
 
 ## Run checks locally
 
@@ -114,7 +158,33 @@ To create the Render service:
    returns `{"status":"ok"}`. Use the demo accounts listed above; only use
    synthetic demo data.
 
-HEAD
+### Google OAuth configuration
+
+Google Sign-In requires the following environment variables to be
+configured in the Render web service:
+
+| Variable | Purpose |
+|---|---|
+| `GOOGLE_CLIENT_ID` | Google OAuth client identifier |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
+| `GOOGLE_REDIRECT_URI` | Authorized OAuth callback URL |
+| `GOOGLE_ALLOWED_PATIENT_EMAILS` | Comma-separated list of patient emails to provision |
+
+Authorized email addresses must also be configured as test users in
+Google Cloud while the OAuth application remains in testing mode.
+
+At startup, Healthwatch automatically provisions missing patient
+accounts for the configured email addresses. Existing accounts are
+preserved, and new accounts receive unique patient IDs and securely
+generated, hashed passwords.
+
+Credentials and authorized email addresses must not be committed to
+source control.
+
+Removing an email from the provisioning environment variable does not
+automatically revoke an existing account. Revocation must be managed
+separately.
+
 The existing [GitHub Actions workflow](./.github/workflows/ci.yml) runs backend
 tests and frontend lint/build on pushes and pull requests to `main`. Render is
 configured to deploy a `main` commit only after its GitHub checks pass. No
@@ -159,6 +229,9 @@ system.
 - `GET /health` checks server availability.
 - `POST /api/auth/login`, `GET /api/auth/me`, and `POST /api/auth/logout`
   handle the session lifecycle.
+- `GET /api/auth/google` initiates Google OAuth authentication.
+- `GET /api/auth/google/callback` verifies the Google identity,
+  checks patient authorization, and creates an authenticated session.
 - `GET /api/patient` returns the signed-in patient's account.
 - `GET /api/symptoms` returns symptom choices.
 - `POST /api/symptom_report` creates a patient report.
